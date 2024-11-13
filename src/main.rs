@@ -1,39 +1,95 @@
-use std::fmt::Display;
+//! # Main File
+//!
+//! This file provides call the necessary to handle each probe,
+//! separately or simultaneously in threaded tasks.
 
-mod ram_info;
-mod rom_info;
-mod cpu_info;
-mod load_info;
-mod motherboard_info;
+use clap::Parser;
+use log::error;
+use std::{
+    process::exit,
+    thread::{sleep, spawn},
+    time::Duration,
+};
+
 mod utils;
+use utils::*;
+//use gui_web::web;
 
-/// Executes a given function and handles potential errors.
-///
-/// This function takes a closure as an argument, executes it, and handles any errors that may occur.
-/// If an error occurs, it is printed to stderr. Otherwise, an empty line is printed to stdout.
-///
-/// # Arguments
-///
-/// * `func` - Closure which return `Result<(), E>` où `E` implémente `Display`.
-///
-fn execute_and_handle_error<F, E>(func: F)
-where
-    F: FnOnce() -> Result<(), E>,
-    E: Display,
-{
-    if let Err(e) = func() { eprintln!("Error : {}\n", e); } 
-    else { println!("\n"); }
+/// Data defining arguments to active or not a probe to retrieve component data.
+#[derive(Parser, Debug)]
+struct Arg {
+    /// List of [`Component`] to active.
+    #[arg(long, value_enum, value_delimiter = ',', conflicts_with = "all")]
+    active: Vec<Component>,
+    /// Activation state of a probe.
+    #[arg(long, conflicts_with = "active")]
+    all: bool,
+    /// Interval in seconds between each probe run. If not set, probes run once.
+    #[arg(long, default_value_t = 0)]
+    freq: u64,
 }
 
-/// Function main
-/// Main program function
-///
-/// Sequentially executes each function of the module to obtain data from the system
-///
+/// Main function of `userv` program that run in threading tasks each probes
+/// to retrieve all data concerning component of a machine.
 fn main() {
-    execute_and_handle_error(rom_info::get_rom_info);
-    execute_and_handle_error(load_info::get_load_info);
-    ram_info::get_ram_info();
-    cpu_info::get_cpu_info();
-    motherboard_info::get_motherboard_info();
+    if let Err(e) = init_logger() {
+        eprintln!("[{HEADER}] INIT 'Failed to initialize error logger' : {e}");
+        return;
+    }
+
+    let arg = Arg::parse();
+    if !arg.all && arg.active.is_empty() {
+        error!("[{HEADER}] Arguments 'No probe specified'");
+        eprintln!(
+            "[{HEADER}] Arguments : No probe specified !\n\
+            --all : Active all probes\n\
+            --active <probe>"
+        );
+        exit(1);
+    }
+
+    let components = if arg.all {
+        vec![
+            Component::Board,
+            Component::Cpu,
+            Component::Gpu,
+            Component::Net,
+            Component::Memory,
+            Component::Storage,
+            Component::System,
+        ]
+    } else {
+        arg.active
+    };
+
+    if arg.freq == 0 {
+        let mut handles = Vec::new();
+        for component in components {
+            let probe = Probe::get_probe(&component);
+            handles.push(spawn(move || Probe::run_probe(probe)));
+        }
+        for handle in handles {
+            match handle.join() {
+                Ok(_) => println!("Finished task with success"),
+                Err(e) => error!("[{HEADER}] Process 'Failure in the thread' : {e:?}"),
+            }
+        }
+    } else {
+        loop {
+            let mut handles = Vec::new();
+            for component in &components {
+                let probe = Probe::get_probe(component);
+                handles.push(spawn(move || Probe::run_probe(probe)));
+            }
+            for handle in handles {
+                match handle.join() {
+                    Ok(_) => println!("Finished task with success"),
+                    Err(e) => error!("[{HEADER}] Process 'Failure in the thread' : {e:?}"),
+                }
+            }
+            sleep(Duration::from_secs(arg.freq));
+        }
+    }
+
+    //web();
 }

@@ -1,0 +1,40 @@
+name: userv
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Markdown syntax checking
+      - name: Markdown Lint
+        uses: DavidAnson/markdownlint-cli2-action@v15
+        with:
+          globs: '**/*.md'
+          config: '.github/.markdownlint.yaml'
+
+      # Rust format checking
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+      # Linting Rust with Clippy
+      - name: Lint with Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      # Compilation
+      - name: Build
+        run: cargo build --verbose
+
+      # Tests
+      - name: Run tests
+        run: cargo test --verbose

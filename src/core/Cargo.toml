@@ -1,0 +1,11 @@
+[package]
+name = "core"
+version = "0.1.0"
+edition.workspace = true
+description = "Core files providing utilities functions"
+
+[dependencies]
+rusqlite.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

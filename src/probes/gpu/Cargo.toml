@@ -1,0 +1,15 @@
+[package]
+name = "gpu"
+version = "0.1.0"
+edition.workspace = true
+description = "Sub-module for GPU device analysis"
+
+[dependencies]
+core.workspace = true
+
+chrono.workspace = true
+log.workspace = true
+nvml-wrapper.workspace = true
+rusqlite.workspace = true
+serde = { workspace = true, features = ["derive"] }
+sysinfo.workspace = true

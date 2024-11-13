@@ -1,81 +1,144 @@
-//! # File utilities module
-//!
-//! This module provides functionality to get data from files and folders.
+//! # File utilities
 
-use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
-use colored::Colorize;
+use board::get_board_info;
+use cpu::get_cpu_info;
+use gpu::get_gpu_info;
+use memory::get_mem_info;
+use network::get_net_info;
+use storage::get_storage_info;
+use system::get_system_info;
 
-/// Function read_file_content
-/// Reads the entire contents of a file into a string.
-///
-/// This function attempts to open the file at the given path and read its entire contents
-/// into a `String`. If successful, it returns the contents wrapped in `Some`. If any error
-/// occurs during the file opening or reading process, it returns `None`.
-///
-/// # Arguments
-///
-/// * `path` - A string slice that holds the path to the file to be read.
-///
-/// # Returns
-///
-/// * `Some(String)` containing the entire contents of the file if successful.
-/// * `None` if any error occurs during file opening or reading.
-///
-/// # Errors
-///
-/// If the file cannot be opened or read, an error message is printed to stderr,
-/// including the file path and the specific error encountered. In this case,
-/// the function returns `None`.
-///
-pub fn read_file_content(path: &str) -> Option<String> {
-    let mut content = String::new();
-    match File::open(path).and_then(|mut file| file.read_to_string(&mut content)) {
-        Ok(_) => Some(content),
-        Err(e) => {
-            eprintln!("{} File : '{}' ({})", "<ERROR_3>".red().bold(), path, e);
-            None
+use clap::ValueEnum;
+use log::{LevelFilter, error};
+use log4rs::{
+    append::file::FileAppender,
+    config::{Appender, Config, Root},
+    encode::pattern::PatternEncoder,
+    filter::threshold::ThresholdFilter,
+    init_config,
+};
+use std::{
+    error::Error,
+    fs::{create_dir_all, write},
+    path::Path,
+};
+
+const LOGGER: &str = "log/error.log";
+pub const HEADER: &str = "MAIN";
+
+/// Enumeration of available arguments corresponding to a component
+#[derive(Debug, Clone, ValueEnum)]
+pub enum Component {
+    /// Motherboard or principal system board probe data.
+    Board,
+    /// CPU probe data.
+    Cpu,
+    /// GPU device probe data.
+    Gpu,
+    /// Network probe data.
+    Net,
+    /// Computing memory probe data.
+    Memory,
+    /// Storage device probe data.
+    Storage,
+    /// Operating system probe data.
+    System,
+}
+
+/// Parameters of probe that analyzing and retrieves data about a component.
+pub struct Probe {
+    /// Identification header for information loggers about a probe.
+    label: &'static str,
+    /// Function concerning data retrieves by a probe.
+    func: fn() -> Result<(), Box<dyn std::error::Error>>,
+}
+
+impl Probe {
+    /// Define the probe and the label associated to a component,
+    /// and check if it is selected.
+    ///
+    /// # Arguments
+    ///
+    /// - `component` : The component that we want retrieves data.
+    ///
+    /// # Returns
+    ///
+    /// The selected component via [`Probe`] information.
+    pub fn get_probe(component: &Component) -> Probe {
+        match component {
+            Component::Board => Probe {
+                label: "BOARD",
+                func: get_board_info,
+            },
+            Component::Cpu => Probe {
+                label: "CPU",
+                func: get_cpu_info,
+            },
+            Component::Gpu => Probe {
+                label: "GPU",
+                func: get_gpu_info,
+            },
+            Component::Net => Probe {
+                label: "NETWORK",
+                func: get_net_info,
+            },
+            Component::Memory => Probe {
+                label: "MEMORY",
+                func: get_mem_info,
+            },
+            Component::Storage => Probe {
+                label: "STORAGE",
+                func: get_storage_info,
+            },
+            Component::System => Probe {
+                label: "SYSTEM",
+                func: get_system_info,
+            },
+        }
+    }
+
+    /// Run a probe to retrieve information about a component.
+    /// If component's data can't be retrieved, we log the error returned.
+    ///
+    /// # Arguments
+    ///
+    /// - `probe` : Concerning component with [`Probe`].
+    pub fn run_probe(probe: Probe) {
+        if let Err(e) = (probe.func)() {
+            error!("[{}] {e}", probe.label);
         }
     }
 }
 
-/// Function parse_file_content
-/// Parses a file and extracts key-value pairs separated by a colon.
-///
-/// This function reads a file line by line and splits each line at the first colon (':').
-/// Both the key and value are trimmed of whitespace.
-///
-/// # Arguments
-///
-/// * `path` - A string slice that holds the path to the file to be parsed.
-/// * `seq` - Char or string identifier in file to determine data sequencing
+/// Initialization and formatting information logger to store messages concerning microservices behavior.
 ///
 /// # Returns
 ///
-/// A `Vec<(String, String)>` where each tuple represents a key-value pair found in the file.
-/// If the file cannot be opened or read, an empty vector is returned.
-///
-/// # Errors
-///
-/// If the file cannot be opened or read, an error message is printed to stderr,
-/// but the function will still return an empty vector.
-///
-pub fn parse_file_content(path: &str, seq: &str) -> Vec<(String, String)> {
-    match File::open(path) {
-        Ok(file) => {
-            let reader = BufReader::new(file);
-            let mut data = Vec::new();
-
-            for line in reader.lines().flatten() {
-                if let Some((key, value)) = line.split_once(seq) {
-                    data.push((key.trim().to_string(), value.trim().to_string()));
-                }
-            }
-            data
-        },
-        Err(e) => {
-            eprintln!("{} File : '{}' ({})", "<ERROR_3>".red().bold(), path, e);
-            Vec::new()
-        }
+/// Writing the error in the log file.
+/// Print IO error message if log writing failed.
+pub fn init_logger() -> Result<(), Box<dyn Error>> {
+    if let Some(parent) = Path::new(LOGGER).parent() {
+        create_dir_all(parent)?;
     }
+
+    let logfile = FileAppender::builder()
+        .encoder(Box::new(PatternEncoder::new("{d} {m} {n}")))
+        .build(LOGGER)?;
+
+    let config = Config::builder()
+        .appender(
+            Appender::builder()
+                .filter(Box::new(ThresholdFilter::new(LevelFilter::Error)))
+                .build("logfile", Box::new(logfile)),
+        )
+        .build(
+            Root::builder()
+                .appender("logfile")
+                .build(LevelFilter::Error),
+        )?;
+
+    let _ = write(LOGGER, "");
+    init_config(config)?;
+
+    Ok(())
 }

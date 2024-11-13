@@ -1,0 +1,11 @@
+[package]
+name = "gui_web"
+version = "0.1.0"
+edition.workspace = true
+description = "Web GUI"
+
+[dependencies]
+actix.workspace = true
+actix-files.workspace = true
+actix-web.workspace = true
+actix-web-actors.workspace = true

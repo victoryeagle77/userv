@@ -1,0 +1,16 @@
+[package]
+name = "board"
+version = "0.1.0"
+edition.workspace = true
+description = "Sub-module for main board / motherboard analysis"
+
+[dependencies]
+core.workspace = true
+
+chrono.workspace = true
+dmidecode.workspace = true
+log.workspace = true
+once_cell.workspace = true
+rusqlite.workspace = true
+serde = { workspace = true, features = ["derive"] }
+sysinfo.workspace = true

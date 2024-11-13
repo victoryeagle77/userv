@@ -1,0 +1,19 @@
+[package]
+name = "memory"
+description = "Sub-module for memory devices analysis"
+edition.workspace = true
+version = "0.1.0"
+
+[dependencies]
+core.workspace = true
+
+chrono.workspace = true
+dmidecode.workspace = true
+log.workspace = true
+once_cell.workspace = true
+rusqlite.workspace = true
+serde = { workspace = true, features = ["derive"] }
+sysinfo.workspace = true
+
+[dev-dependencies]
+env_logger.workspace = true

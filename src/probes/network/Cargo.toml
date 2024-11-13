@@ -1,0 +1,15 @@
+[package]
+name = "network"
+version = "0.1.0"
+edition.workspace = true
+description = "Sub-module for network analysis"
+
+[dependencies]
+core.workspace = true
+
+chrono.workspace = true
+log.workspace = true
+rusqlite.workspace = true
+serde = { workspace = true, features = ["derive"] }
+sysinfo.workspace = true
+tokio = { version = "1", features = ["full"] }
