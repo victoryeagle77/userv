@@ -1,3 +1,4 @@
-# userv
+# Userv
 
-Programme Rust destiné aux distributions Linux pour analyser en profondeur le matériel et le logiciel d'un équipement informatique. 
+Rust program providing functionalities to analyzing some parameters on a computer or a IT equipment.
+Based on multiple microservices, this program retrieves important data like estimated lifespan of components and global energetic consumption.
