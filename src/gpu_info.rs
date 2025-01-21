@@ -36,6 +36,16 @@ struct GpuInfo {
     fan_spd: Vec<Option<u32>>,
     /// GPU temperature.
     tmp_gpu: Option<u32>,
+    /// Process utilization statistics.
+    processes: Vec<ProcessInfo>,
+}
+
+/// Information about a running process on the GPU
+#[derive(Debug, Serialize)]
+struct ProcessInfo {
+    pid: u32,
+    name: String,
+    utilization: u32,
 }
 
 /// Function that retrieves detailed GPU information.
@@ -73,6 +83,17 @@ fn collect_gpu_data() -> Result<Vec<GpuInfo>, Box<dyn std::error::Error>> {
             fan_speeds.push(fan_speed);
         }
 
+        let mut processes_info = Vec::new();
+        let processes = device.running_compute_processes()?;
+        for process in processes {
+            let process_name = nvml.sys_process_name(process.pid, 256).unwrap_or_else(|_| "Unknown".to_string());
+            processes_info.push(ProcessInfo {
+                pid: process.pid,
+                name: process_name,
+                utilization: process.utilization,
+            });
+        }
+
         let data = GpuInfo {
             gpu_num: index,
             gpu_nme: name,
@@ -84,6 +105,7 @@ fn collect_gpu_data() -> Result<Vec<GpuInfo>, Box<dyn std::error::Error>> {
             use_mem: Some(usage.memory),
             fan_spd: fan_speeds,
             tmp_gpu: temperature,
+            processes: processes_info,
         };
 
         result.push(data);
@@ -114,6 +136,13 @@ pub fn get_gpu_info() {
                             "use_mem": item.use_mem.unwrap_or(0),
                             "fan_spd": item.fan_spd.iter().map(|&speed| speed.unwrap_or(0)).collect::<Vec<u32>>(),
                             "tmp_gpu": item.tmp_gpu.unwrap_or(0),
+                            "processes": item.processes.iter().map(|proc| {
+                                json!({
+                                    "pid": proc.pid,
+                                    "name": proc.name,
+                                    "utilization": proc.utilization,
+                                })
+                            }).collect::<Vec<_>>(),
                         }
                     })
                 })
