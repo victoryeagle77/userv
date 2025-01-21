@@ -34,7 +34,7 @@ struct GpuInfo {
     use_mem: Option<u32>,
     /// Speed per fan.
     fan_spd: Vec<Option<u32>>,
-    /// GPU temperature.
+    /// GPU temperature in °C.
     tmp_gpu: Option<u32>,
     /// Process utilization statistics.
     processes: Vec<ProcessInfo>,
