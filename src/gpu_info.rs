@@ -89,6 +89,7 @@ fn collect_gpu_data() -> Result<Vec<GpuInfo>, Box<dyn std::error::Error>> {
         result.push(data);
     }
 
+    nvml.shutdown()?;
     Ok(result)
 }
 
