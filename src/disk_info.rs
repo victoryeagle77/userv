@@ -7,11 +7,7 @@ use libc::{c_void, close, open, read};
 use log::error;
 use serde::Serialize;
 use serde_json::json;
-use std::{
-    ffi::CString,
-    fs::{read_dir, File},
-    io::{BufRead, BufReader},
-};
+use std::{ffi::CString, fs::read_dir};
 
 use crate::utils::{read_file_content, write_json_to_file};
 
@@ -23,38 +19,43 @@ const LOGGER: &str = "log/disk_data.json";
 #[derive(Debug, Serialize)]
 struct DiskInfo {
     /// Path in system attached to device memory.
-    device: String,
-    size: u64,
-    model: Option<String>,
-    vendor: Option<String>,
+    disk_device: String,
+    /// Space of the disk.
+    disk_size: u64,
+    /// Disk model name.
+    disk_model: Option<String>,
+    /// Disk vendor name.
+    disk_vendor: Option<String>,
+    /// Disk type (HDD or SSD).
     disk_type: String,
-    partitions: Vec<PartitionInfo>,
+    /// Disk partitions list.
+    disk_part: Vec<PartitionInfo>,
+    /// More detailed disk information.
     smart_info: SmartInfo,
 }
 
 /// Collected partitions of a disk.
 #[derive(Debug, Serialize)]
 struct PartitionInfo {
-    name: String,
-    size: f64,
+    /// Disk partition path name.
+    part_name: String,
+    /// Space on the partition disk.
+    part_size: f64,
 }
 
+/// Collected more specific and detailed disk data.
 #[derive(Debug, Serialize)]
 struct SmartInfo {
-    power_on_hours: u8,
-    health_status: String,
-    reallocated_sectors: u8,
-    current_pending_sectors: u8,
-    temperature: u8,
-}
-
-/// Reads file content
-fn read_file(path: &str) -> Result<String, std::io::Error> {
-    let file = File::open(path)?;
-    let mut reader = BufReader::new(file);
-    let mut contents = String::new();
-    reader.read_line(&mut contents)?;
-    Ok(contents)
+    /// Disk uptime power on hours.
+    uptime: u8,
+    /// Disk health status.
+    health: String,
+    /// Reallocated sectors on the disk.
+    realloc: u8,
+    /// Current pending sectors on the disk.
+    pending: u8,
+    /// Disk temperature.
+    temp: u8,
 }
 
 /// Retrieves SMART data for a given disk
@@ -82,81 +83,94 @@ fn get_smart_info(device_path: &str) -> Result<SmartInfo, String> {
 
 /// Extracts SMART information from raw data
 fn extract_smart_info(buffer: &[u8]) -> SmartInfo {
-    let power_on_hours: u8 = buffer[9];
-    let reallocated_sectors: u8 = buffer[5];
-    let current_pending_sectors: u8 = buffer[196];
-    let temperature: u8 = buffer[194];
+    let uptime: u8 = buffer[9];
+    let realloc: u8 = buffer[5];
+    let pending: u8 = buffer[196];
+    let temp: u8 = buffer[194];
 
-    let health_status = if reallocated_sectors > 0 {
-        format!("Worn (reallocated sectors : {})", reallocated_sectors)
+    let health = if realloc > 0 {
+        format!("Worn (reallocated sectors : {})", realloc)
     } else {
         "Unused".to_string()
     };
 
     SmartInfo {
-        power_on_hours,
-        health_status,
-        reallocated_sectors,
-        current_pending_sectors,
-        temperature,
+        uptime,
+        health,
+        realloc,
+        pending,
+        temp,
     }
 }
 
 /// Function that retrieves detailed disk information,
+/// especially by reading of "/sys/block/" directory.
 ///
 /// # Returns
 ///
-/// `result` : Completed `MotherboardInfo` structure with all motherboard information
-/// - Motherboard name
-/// - Motherboard serial number
-/// - Motherboard version
-/// - Motherboard vendor
-/// - Bios update
-/// - Bios date release
-/// - Bios vendor
-/// - Bios version
-/// - Motherboard uuid
+/// `result` : The compilation of completed structures concerning all disk information.
+///
+/// * `DiskInfo` structure :
+/// > - Path in system attached to device memory
+/// > - Space of the disk
+/// > - Disk model name
+/// > - Disk vendor name
+/// > - Disk type (HDD or SSD)
+/// > - Disk partitions list
+///
+/// * `PartitionInfo` structure :
+/// > - Disk partition path name
+/// > - Space on the partition disk
+///
+/// * `SmartInfo` structure :
+/// > - Disk uptime power on hours
+/// > - Disk health status
+/// > - Reallocated sectors on the disk
+/// > - Current pending sectors on the disk
+/// > - Disk temperature
 fn collect_disk_data() -> Result<Vec<DiskInfo>, String> {
-    let file = File::open(PARTITIONS).map_err(|e| e.to_string())?;
-    let reader = BufReader::new(file);
+    let content = read_file_content(PARTITIONS)
+        .ok_or_else(|| "Impossible de lire le fichier des partitions".to_string())?;
     let mut disks = Vec::new();
 
-    for line in reader.lines().skip(2) {
-        let line = line.map_err(|e| e.to_string())?;
+    for line in content.lines().skip(2) {
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.len() == 4 && !parts[3].chars().any(|c| c.is_ascii_digit()) {
             let device = parts[3];
 
             let mut disk_info = DiskInfo {
-                device: device.to_string(),
-                size: 0,
-                model: None,
-                vendor: None,
+                disk_device: device.to_string(),
+                disk_size: 0,
+                disk_model: None,
+                disk_vendor: None,
                 disk_type: String::new(),
-                partitions: Vec::new(),
+                disk_part: Vec::new(),
                 smart_info: SmartInfo {
-                    power_on_hours: 0,
-                    health_status: String::new(),
-                    reallocated_sectors: 0,
-                    current_pending_sectors: 0,
-                    temperature: 0,
+                    uptime: 0,
+                    health: String::new(),
+                    realloc: 0,
+                    pending: 0,
+                    temp: 0,
                 },
             };
 
             // Size
-            if let Ok(size) = read_file(&format!("/sys/block/{}/size", device)) {
-                disk_info.size = size.trim().parse::<u64>().unwrap_or(0) * 512;
+            if let Some(size) = read_file_content(&format!("/sys/block/{}/size", device)) {
+                disk_info.disk_size = size.trim().parse::<u64>().unwrap_or(0) * 512;
             }
             // Model
-            if let Ok(model) = read_file(&format!("/sys/block/{}/device/model", device)) {
-                disk_info.model = Some(model.trim().to_string());
+            if let Some(model) = read_file_content(&format!("/sys/block/{}/device/model", device)) {
+                disk_info.disk_model = Some(model.trim().to_string());
             }
             // Vendor
-            if let Ok(vendor) = read_file(&format!("/sys/block/{}/device/vendor", device)) {
-                disk_info.vendor = Some(vendor.trim().to_string());
+            if let Some(vendor) = read_file_content(&format!("/sys/block/{}/device/vendor", device))
+            {
+                disk_info.disk_vendor = Some(vendor.trim().to_string());
             }
             // Type
-            if let Ok(rotational) = read_file(&format!("/sys/block/{}/queue/rotational", device)) {
+            if let Some(rotational) =
+                read_file_content(&format!("/sys/block/{}/queue/rotational", device))
+            {
                 disk_info.disk_type = if rotational.trim() == "1" {
                     "HDD"
                 } else {
@@ -164,21 +178,22 @@ fn collect_disk_data() -> Result<Vec<DiskInfo>, String> {
                 }
                 .to_string();
             }
+
             // Partitions
             if let Ok(entries) = read_dir(format!("/sys/block/{}", device)) {
                 for entry in entries {
                     if let Ok(entry) = entry {
                         let name = entry.file_name();
                         if name.to_str().map_or(false, |s| s.starts_with(device)) {
-                            if let Ok(size) = read_file(&format!(
+                            if let Some(size) = read_file_content(&format!(
                                 "/sys/block/{}/{}/size",
                                 device,
                                 name.to_str().unwrap()
                             )) {
                                 let size_bytes = size.trim().parse::<u64>().unwrap_or(0) * 512;
-                                disk_info.partitions.push(PartitionInfo {
-                                    name: name.to_str().unwrap().to_string(),
-                                    size: size_bytes as f64 / 1073741824.0,
+                                disk_info.disk_part.push(PartitionInfo {
+                                    part_name: name.to_str().unwrap().to_string(),
+                                    part_size: size_bytes as f64 / 1073741824.0,
                                 });
                             }
                         }
@@ -210,18 +225,18 @@ pub fn get_disk_info() {
                     "timestamp": timestamp,
                     "disks": disks.iter().map(|disk| {
                         json!({
-                            "device": disk.device,
-                            "size": disk.size / 1_073_741_824, // Convert to GB
-                            "model": disk.model.clone().unwrap_or_else(|| "NULL".to_string()),
-                            "vendor": disk.vendor.clone().unwrap_or_else(|| "NULL".to_string()),
+                            "device": disk.disk_device,
+                            "size": disk.disk_size / 1000000000, // Convert to GB
+                            "model": disk.disk_model.clone().unwrap_or_else(|| "NULL".to_string()),
+                            "vendor": disk.disk_vendor.clone().unwrap_or_else(|| "NULL".to_string()),
                             "type": disk.disk_type,
-                            "partitions": disk.partitions,
+                            "partitions": disk.disk_part,
                             "smart_info": {
-                                "power_on_hours": disk.smart_info.power_on_hours,
-                                "health_status": disk.smart_info.health_status,
-                                "reallocated_sectors": disk.smart_info.reallocated_sectors,
-                                "current_pending_sectors": disk.smart_info.current_pending_sectors,
-                                "temperature": disk.smart_info.temperature,
+                                "uptime": disk.smart_info.uptime,
+                                "health": disk.smart_info.health,
+                                "realloc": disk.smart_info.realloc,
+                                "pending": disk.smart_info.pending,
+                                "temp": disk.smart_info.temp,
                             }
                         })
                     }).collect::<Vec<_>>()
