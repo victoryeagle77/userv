@@ -7,7 +7,7 @@ use libc::{c_void, close, open, read};
 use log::error;
 use serde::Serialize;
 use serde_json::json;
-use std::{ffi::CString, fs::read_dir};
+use std::{ffi::CString, ffi::NulError, fs::read_dir};
 
 use crate::utils::{read_file_content, write_json_to_file};
 
@@ -21,17 +21,17 @@ struct DiskInfo {
     /// Path in system attached to device memory.
     disk_device: String,
     /// Space of the disk.
-    disk_size: u64,
+    disk_size: Option<u64>,
     /// Disk model name.
     disk_model: Option<String>,
     /// Disk vendor name.
     disk_vendor: Option<String>,
     /// Disk type (HDD or SSD).
-    disk_type: String,
+    disk_type: Option<String>,
     /// Disk partitions list.
     disk_part: Vec<PartitionInfo>,
     /// More detailed disk information.
-    smart_info: SmartInfo,
+    smart_info: Option<SmartInfo>,
 }
 
 /// Collected partitions of a disk.
@@ -47,63 +47,80 @@ struct PartitionInfo {
 #[derive(Debug, Serialize)]
 struct SmartInfo {
     /// Disk uptime power on hours.
-    uptime: u8,
+    uptime: Option<u8>,
     /// Disk health status.
-    health: String,
+    health: Option<String>,
     /// Reallocated sectors on the disk.
-    realloc: u8,
+    realloc: Option<u8>,
     /// Current pending sectors on the disk.
-    pending: u8,
+    pending: Option<u8>,
     /// Disk temperature.
-    temp: u8,
+    temp: Option<u8>,
 }
 
-/// Retrieves SMART data for a given disk
-fn get_smart_info(device_path: &str) -> Result<SmartInfo, String> {
-    let device = CString::new(device_path).map_err(|_| "Erreur lors de la création du CString")?;
+/// Function that retrieves smart disk information.
+///
+/// # Arguments
+///
+/// - `path` : Disk device path in system.
+///
+/// # Returns
+///
+/// * `SmartInfo` structure :
+/// > - Disk uptime power on hours
+/// > - Disk health status
+/// > - Reallocated sectors on the disk
+/// > - Current pending sectors on the disk
+/// > - Disk temperature
+///
+/// - Error message if CString can not be created, file descriptor content or final extracted data are null.
+fn collect_smart_data(path: &str) -> Result<SmartInfo, String> {
+    let device = CString::new(path).map_err(|e: NulError| {
+        error!("[{}] Failed to create CString: {}", HEADER, e);
+        "Failed to create CString".to_string()
+    })?;
     let fd: i32 = unsafe { open(device.as_ptr(), 0) };
 
     if fd < 0 {
-        return Err("Erreur lors de l'ouverture du périphérique".to_string());
+        error!("[{}] Fail to open device", HEADER);
+        return Err("Fail to open device".to_string());
     }
 
     let mut buffer: [u8; 512] = [0; 512];
-    let result: isize = unsafe { read(fd, buffer.as_mut_ptr() as *mut c_void, buffer.len()) };
+    let data: isize = unsafe { read(fd, buffer.as_mut_ptr() as *mut c_void, buffer.len()) };
 
-    if result < 0 {
+    if data < 0 {
         unsafe { close(fd) };
-        return Err("Erreur lors de la lecture des données SMART".to_string());
+        error!("[{}] Fail to read SMART data", HEADER);
+        return Err("Fail to read SMART data".to_string());
     }
 
-    let smart_info: SmartInfo = extract_smart_info(&buffer[..result as usize]);
-    unsafe { close(fd) };
+    let uptime = buffer.get(9).copied();
+    let realloc = buffer.get(5).copied();
+    let pending = buffer.get(196).copied();
+    let temp = buffer.get(194).copied();
+    let health = realloc.map(|r| {
+        if r > 0 {
+            format!("Worn (reallocated sectors : {})", r)
+        } else {
+            "Unused".to_string()
+        }
+    });
 
-    Ok(smart_info)
-}
-
-/// Extracts SMART information from raw data
-fn extract_smart_info(buffer: &[u8]) -> SmartInfo {
-    let uptime: u8 = buffer[9];
-    let realloc: u8 = buffer[5];
-    let pending: u8 = buffer[196];
-    let temp: u8 = buffer[194];
-
-    let health = if realloc > 0 {
-        format!("Worn (reallocated sectors : {})", realloc)
-    } else {
-        "Unused".to_string()
-    };
-
-    SmartInfo {
+    let result: SmartInfo = SmartInfo {
         uptime,
         health,
         realloc,
         pending,
         temp,
-    }
+    };
+
+    unsafe { close(fd) };
+
+    Ok(result)
 }
 
-/// Function that retrieves detailed disk information,
+/// Function that retrieves all detailed disk information,
 /// especially by reading of "/sys/block/" directory.
 ///
 /// # Returns
@@ -140,60 +157,76 @@ fn collect_disk_data() -> Result<Vec<DiskInfo>, String> {
 
             let mut disk_info = DiskInfo {
                 disk_device: device.to_string(),
-                disk_size: 0,
+                disk_size: None,
                 disk_model: None,
                 disk_vendor: None,
-                disk_type: String::new(),
+                disk_type: None,
                 disk_part: Vec::new(),
-                smart_info: SmartInfo {
-                    uptime: 0,
-                    health: String::new(),
-                    realloc: 0,
-                    pending: 0,
-                    temp: 0,
-                },
+                smart_info: None,
             };
 
             // Size
-            if let Some(size) = read_file_content(&format!("/sys/block/{}/size", device)) {
-                disk_info.disk_size = size.trim().parse::<u64>().unwrap_or(0) * 512;
-            }
+            disk_info.disk_size = read_file_content(&format!("/sys/block/{}/size", device))
+                .and_then(|size| size.trim().parse::<u64>().ok())
+                .map(|size| size * 512);
+
             // Model
-            if let Some(model) = read_file_content(&format!("/sys/block/{}/device/model", device)) {
-                disk_info.disk_model = Some(model.trim().to_string());
-            }
+            disk_info.disk_model =
+                read_file_content(&format!("/sys/block/{}/device/model", device))
+                    .map(|model| model.trim().to_string());
+
             // Vendor
-            if let Some(vendor) = read_file_content(&format!("/sys/block/{}/device/vendor", device))
-            {
-                disk_info.disk_vendor = Some(vendor.trim().to_string());
-            }
+            disk_info.disk_vendor =
+                read_file_content(&format!("/sys/block/{}/device/vendor", device))
+                    .map(|vendor| vendor.trim().to_string());
+
             // Type
-            if let Some(rotational) =
+            disk_info.disk_type = if let Some(rotational) =
                 read_file_content(&format!("/sys/block/{}/queue/rotational", device))
             {
-                disk_info.disk_type = if rotational.trim() == "1" {
-                    "HDD"
-                } else {
-                    "SSD"
+                match rotational.trim() {
+                    "1" => Some("HDD".to_string()),
+                    "0" => {
+                        if read_file_content(&format!("/sys/block/{}/device/transport", device))
+                            .map_or(false, |t| t.trim() == "nvme")
+                        {
+                            Some("NVMe".to_string())
+                        } else {
+                            Some("SSD".to_string())
+                        }
+                    }
+                    _ => None,
                 }
-                .to_string();
+            } else {
+                None
+            };
+
+            if disk_info.disk_type.is_none() {
+                if read_file_content(&format!("/sys/block/{}/device/type", device))
+                    .map_or(false, |t| t.trim() == "MMC")
+                {
+                    disk_info.disk_type = Some("eMMC".to_string());
+                } else if read_file_content(&format!("/sys/block/{}/removable", device))
+                    .map_or(false, |r| r.trim() == "1")
+                {
+                    disk_info.disk_type = Some("SD Card".to_string());
+                }
             }
 
             // Partitions
             if let Ok(entries) = read_dir(format!("/sys/block/{}", device)) {
-                for entry in entries {
-                    if let Ok(entry) = entry {
-                        let name = entry.file_name();
-                        if name.to_str().map_or(false, |s| s.starts_with(device)) {
-                            if let Some(size) = read_file_content(&format!(
-                                "/sys/block/{}/{}/size",
-                                device,
-                                name.to_str().unwrap()
-                            )) {
-                                let size_bytes = size.trim().parse::<u64>().unwrap_or(0) * 512;
+                for entry in entries.flatten() {
+                    let name = entry.file_name();
+                    if name.to_str().map_or(false, |s| s.starts_with(device)) {
+                        if let Some(size) = read_file_content(&format!(
+                            "/sys/block/{}/{}/size",
+                            device,
+                            name.to_str().unwrap()
+                        )) {
+                            if let Ok(size_bytes) = size.trim().parse::<u64>() {
                                 disk_info.disk_part.push(PartitionInfo {
                                     part_name: name.to_str().unwrap().to_string(),
-                                    part_size: size_bytes as f64 / 1073741824.0,
+                                    part_size: (size_bytes * 512) as f64 / 1_073_741_824.0,
                                 });
                             }
                         }
@@ -202,9 +235,7 @@ fn collect_disk_data() -> Result<Vec<DiskInfo>, String> {
             }
 
             // SMART info
-            if let Ok(smart_info) = get_smart_info(&format!("/dev/{}", device)) {
-                disk_info.smart_info = smart_info;
-            }
+            disk_info.smart_info = collect_smart_data(&format!("/dev/{}", device)).ok();
 
             disks.push(disk_info);
         }
@@ -219,25 +250,36 @@ pub fn get_disk_info() {
     match collect_disk_data() {
         Ok(disks) => {
             let timestamp = Some(Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true))
-                .map_or_else(|| None, |ts| Some(ts));
+                .map_or_else(|| None, Some);
             let data: serde_json::Value = json!({
                 HEADER: {
                     "timestamp": timestamp,
                     "disks": disks.iter().map(|disk| {
                         json!({
                             "device": disk.disk_device,
-                            "size": disk.disk_size / 1000000000, // Convert to GB
-                            "model": disk.disk_model.clone().unwrap_or_else(|| "NULL".to_string()),
-                            "vendor": disk.disk_vendor.clone().unwrap_or_else(|| "NULL".to_string()),
+                            "size": disk.disk_size.map(|size| size / 1_000_000_000), // Convert to GB
+                            "model": disk.disk_model,
+                            "vendor": disk.disk_vendor,
                             "type": disk.disk_type,
-                            "partitions": disk.disk_part,
-                            "smart_info": {
-                                "uptime": disk.smart_info.uptime,
-                                "health": disk.smart_info.health,
-                                "realloc": disk.smart_info.realloc,
-                                "pending": disk.smart_info.pending,
-                                "temp": disk.smart_info.temp,
-                            }
+                            "partitions": if disk.disk_part.is_empty() {
+                                serde_json::Value::Null
+                            } else {
+                                json!(disk.disk_part.iter().map(|part| {
+                                    json!({
+                                        "part_name": part.part_name,
+                                        "part_size": part.part_size
+                                    })
+                                }).collect::<Vec<_>>())
+                            },
+                            "smart_info": disk.smart_info.as_ref().map(|smart| {
+                                json!({
+                                    "uptime": smart.uptime,
+                                    "health": smart.health,
+                                    "realloc": smart.realloc,
+                                    "pending": smart.pending,
+                                    "temp": smart.temp,
+                                })
+                            })
                         })
                     }).collect::<Vec<_>>()
                 }
