@@ -11,12 +11,29 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+      - uses: actions/checkout@v4
+
+      # Markdown syntax checking
+      - name: Markdown Lint
+        uses: DavidAnson/markdownlint-cli2-action@v15
+        with:
+          globs: '**/*.md'
+
+      # Rust format checking
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+      # Linting Rust with Clippy
+      - name: Lint with Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      # Compilation
+      - name: Build
+        run: cargo build --verbose
+
+      # Tests
+      - name: Run tests
+        run: cargo test --verbose
