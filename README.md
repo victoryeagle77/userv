@@ -1,6 +1,7 @@
 # Userv
 
-Rust program providing functionalities to analyzing some parameters on a computer or a IT equipment. Based on multiple microservices, this program retrieves important data like estimated lifespan of components and global energetic consumption.
+This program providing functionalities to analyzing some parameters on a computer or IT equipment.
+With multiple microservices intended for Linux systems, this program retrieves various data like :
 
 * GPU data
 * Processor data
