@@ -2,16 +2,17 @@
 //!
 //! This module provides functionality to retrieve internet data consumption.
 
+use log::error;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::error::Error;
-use sysinfo::{NetworkExt, System, SystemExt};
+use std::{thread, time};
+use sysinfo::Networks;
 
 use crate::utils::write_json_to_file;
 
 const FACTOR: f64 = 1e6;
-
 const HEADER: &str = "NET_DATA";
 const LOGGER: &str = "log/net_data.json";
 
@@ -50,18 +51,23 @@ impl NetworkInterface {
 ///
 /// A vector of [`NetworkInterface`] containing network data consumption.
 fn collect_interface_data() -> Result<Vec<NetworkInterface>, Box<dyn Error>> {
-    let mut system = System::new();
-    system.refresh_networks_list();
-    system.refresh_networks();
+    let mut networks = Networks::new_with_refreshed_list();
+    // Waiting a bit to get data from network
+    thread::sleep(time::Duration::from_millis(10));
+    // Refreshing again to generate diff
+    networks.refresh(true);
 
     let mut interfaces = Vec::new();
 
-    for (name, data) in system.networks() {
+    for (name, data) in &networks {
         let received = data.total_received();
         let transmitted = data.total_transmitted();
 
         // Ignoring network interface without traffic
         if received == 0 && transmitted == 0 {
+            error!(
+                "[{HEADER}] Data 'Interface ({name}) exists but has no received or transmitted data (0 bytes)'"
+            );
             continue;
         }
 
@@ -74,28 +80,27 @@ fn collect_interface_data() -> Result<Vec<NetworkInterface>, Box<dyn Error>> {
     }
 
     if interfaces.is_empty() {
-        Err("Data 'No valid network interfaces found'".into())
+        Err("Data 'No valid network interfaces found'"
+            .to_string()
+            .into())
     } else {
         Ok(interfaces)
     }
 }
 
-/// Public function to gather network info and write it as JSON to file.
+/// Public function used to send JSON formatted values,
+/// from [`collect_interface_data`] function result.
 ///
 /// # Returns
 ///
 /// Returns a Result to propagate errors.
 pub fn get_net_info() -> Result<(), Box<dyn Error>> {
     let interfaces = collect_interface_data()?;
-
-    let values: HashMap<_, _> = interfaces
+    let data: HashMap<_, _> = interfaces
         .into_iter()
         .map(|iface| (iface.name.clone(), iface.to_json()))
         .collect();
-
-    let json_value = json!({ HEADER: values });
-
-    write_json_to_file(|| Ok(json_value), LOGGER, HEADER)?;
-
+    let values = json!({ HEADER: data });
+    write_json_to_file(|| Ok(values), LOGGER, HEADER)?;
     Ok(())
 }

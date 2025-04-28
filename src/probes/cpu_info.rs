@@ -10,10 +10,10 @@ use std::{
     ffi::OsStr,
     fs,
     path::PathBuf,
-    thread::sleep,
+    thread::{self, sleep},
     time::{Duration, Instant},
 };
-use sysinfo::{Component, ComponentExt, CpuExt, System, SystemExt};
+use sysinfo::{Component, Components, CpuRefreshKind, RefreshKind, System};
 
 use crate::utils::{read_file_content, write_json_to_file};
 
@@ -75,12 +75,13 @@ impl CpuInfo {
 /// This function introduces a 1-second delay due to the sleep between CPU usage snapshots.
 /// This delay is necessary to calculate an accurate usage percentage.
 fn get_cpu_usage() -> Result<Vec<f32>, String> {
-    let mut sys: System = System::new_all();
-    sys.refresh_cpu();
-    sleep(Duration::from_secs(1));
-    sys.refresh_cpu();
+    let mut sys = System::new_with_specifics(RefreshKind::nothing().with_cpu(CpuRefreshKind::everything()),);
+    // Wait a bit because CPU usage is based on diff.
+    thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
+    // Refresh CPUs again to get actual value.
+    sys.refresh_cpu_usage();
 
-    let cpus: &[sysinfo::Cpu] = sys.cpus();
+    let cpus= sys.cpus();
 
     if cpus.is_empty() {
         error!("[{HEADER}] Data 'Unable to get CPU core information'");
@@ -111,15 +112,14 @@ fn get_cpu_usage() -> Result<Vec<f32>, String> {
 /// - `result` : Vector where each element represents cores and its thermal state in Celsius.
 /// - An empty vector if no thermal files or data are found.
 fn get_cpu_temp() -> Result<Vec<(String, f32)>, String> {
-    let mut sys: System = System::new_all();
-    sys.refresh_components();
+    let components = Components::new_with_refreshed_list();
 
-    let temps: Vec<(String, f32)> = sys
+    let temps = components
         .components()
         .iter()
         .filter_map(|component: &Component| {
-            let name: String = component.label().to_string();
-            let temperature: f32 = component.temperature();
+            let name = component.label().to_string();
+            let temperature = component.temperature();
             if name.to_lowercase().contains("cpu") || name.to_lowercase().contains("core") {
                 Some((name, temperature))
             } else {
@@ -197,7 +197,7 @@ fn get_cpu_consumption() -> Result<Vec<(String, f64)>, String> {
 /// - CPU detailed core usage
 fn collect_cpu_data() -> CpuInfo {
     let mut sys: System = System::new_all();
-    sys.refresh_cpu();
+    sys.refresh_cpu_all();
 
     let cpu: Option<&sysinfo::Cpu> = sys.cpus().first();
 

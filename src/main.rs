@@ -21,9 +21,21 @@ struct Cli {
     all: bool,
 }
 
+fn get_load_info_wrapper() {
+    if let Err(e) = load_info::get_load_info() {
+        error!("[LOAD_SYSTEM] {e}");
+    }
+}
+
 fn get_net_info_wrapper() {
     if let Err(e) = net_info::get_net_info() {
         error!("[NET_DATA] {e}");
+    }
+}
+
+fn get_ram_info_wrapper() {
+    if let Err(e) = ram_info::get_ram_info() {
+        error!("[RAM] {e}");
     }
 }
 
@@ -39,10 +51,10 @@ fn main() {
         ("cpu", cpu_info::get_cpu_info),
         ("disk", disk_info::get_disk_info),
         ("gpu", gpu_info::get_gpu_info),
-        ("load", load_info::get_load_info),
+        ("load", get_load_info_wrapper),
         ("motherboard", motherboard_info::get_motherboard_info),
         ("net", get_net_info_wrapper),
-        ("ram", ram_info::get_ram_info),
+        ("ram", get_ram_info_wrapper),
     ];
 
     if cli.all {

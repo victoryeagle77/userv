@@ -6,7 +6,7 @@ use log::error;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::{cmp::Ordering::Equal, error::Error};
-use sysinfo::{LoadAvg, Pid, PidExt, Process, ProcessExt, System, SystemExt};
+use sysinfo::System;
 
 use crate::utils::write_json_to_file;
 
@@ -15,7 +15,7 @@ const LOGGER: &str = "log/load_data.json";
 
 /// Collection of collected system load data.
 #[derive(Debug, Serialize)]
-struct SystemLoad {
+struct SystemInfo {
     /// Time since the last system boot (days, hours, minutes).
     uptime: Option<(u64, u64, u64)>,
     /// Average system load calculated (1 min, 5 min, 15 min).
@@ -34,8 +34,8 @@ struct SystemLoad {
     top_process_memory_usage: Option<u64>,
 }
 
-impl SystemLoad {
-    /// Converts `SystemLoad` into a JSON object.
+impl SystemInfo {
+    /// Converts `SystemInfo` into a JSON object.
     fn to_json(&self) -> Value {
         json!({
             "uptime": self.uptime.map(|(days, hours, minutes)| json!({
@@ -64,21 +64,13 @@ impl SystemLoad {
 ///
 /// # Returns
 ///
-/// A tuple containing the following information :
-/// - Time since the last system boot (days, hours, minutes).
-/// - Average system load calculated (1 min, 5 min, 15 min).
-/// - Total of running processes.
-/// - Total number of processes.
-/// - PID of the top resource-consuming process.
-/// - Name of the top resource-consuming process.
-/// - CPU usage of the top resource-consuming process in percentage.
-/// - Memory usage of the top resource-consuming process in MB.
-fn collect_load_data() -> SystemLoad {
-    let mut system: System = System::new_all();
-    system.refresh_all();
+/// A tuple containing [`SystemInfo`] structure with all computing memory information
+fn collect_load_data() -> Result<SystemInfo, Box<dyn Error>> {
+    let mut sys = System::new_all();
+    sys.refresh_all();
 
-    let uptime: Option<(u64, u64, u64)> = {
-        let secs: u64 = system.uptime();
+    let uptime = {
+        let secs = System::uptime();
         if secs == 0 {
             error!("[{HEADER}] Data 'Failed to retrieve uptime'");
             None
@@ -87,8 +79,8 @@ fn collect_load_data() -> SystemLoad {
         }
     };
 
-    let load_avg: Option<(f64, f64, f64)> = {
-        let load: LoadAvg = system.load_average();
+    let load_avg = {
+        let load = System::load_average();
         if load.one == 0.0 && load.five == 0.0 && load.fifteen == 0.0 {
             error!("[{HEADER}] Data 'Failed to retrieve load averages'");
             None
@@ -97,44 +89,45 @@ fn collect_load_data() -> SystemLoad {
         }
     };
 
-    let run_proc: Option<u32> = Some(system.processes().len() as u32);
+    let run_proc = Some(sys.processes().len() as u32);
     if run_proc.is_none() {
         error!("[{HEADER}] Data 'Failed to retrieve running processes count'");
     }
 
-    let tot_proc: Option<u32> = Some(system.processes().len() as u32);
+    let tot_proc = Some(sys.processes().len() as u32);
     if tot_proc.is_none() {
         error!("[{HEADER}] Data 'Failed to retrieve total processes count'");
     }
 
-    let top_process: Option<(&Pid, &Process)> = system
+    let top_process = sys
         .processes()
         .iter()
         .max_by(|(_, a), (_, b)| a.cpu_usage().partial_cmp(&b.cpu_usage()).unwrap_or(Equal));
-
     if top_process.is_none() {
         error!("[{HEADER}] Data 'Failed to find the top resource-consuming process'");
     }
 
-    SystemLoad {
+    Ok(SystemInfo {
         uptime,
         load_avg,
         run_proc,
         tot_proc,
         top_process_pid: top_process.map(|(pid, _)| pid.as_u32()),
-        top_process_name: top_process.map(|(_, process)| process.name().to_string()),
-        top_process_cpu_usage: top_process.map(|(_, process)| process.cpu_usage()),
-        top_process_memory_usage: top_process.map(|(_, process)| process.memory() / 1_000),
-    }
+        top_process_name: top_process.map(|(_pid, process)| process.name().to_string()),
+        top_process_cpu_usage: top_process.map(|(_pid, process)| process.cpu_usage()),
+        top_process_memory_usage: top_process.map(|(_pid, process)| process.memory() / 1_000),
+    })
 }
 
 /// Public function used to send JSON formatted values,
-/// from `collect_load_data` function result.
-pub fn get_load_info() {
-    let data = || -> Result<Value, Box<dyn Error>> {
-        let values: SystemLoad = collect_load_data();
-        Ok(json!({ HEADER: values.to_json() }))
-    };
-
-    write_json_to_file(data, LOGGER, HEADER);
+/// from [`collect_load_data`] function result.
+///
+/// # Returns
+///
+/// Returns a Result to propagate errors.
+pub fn get_load_info() -> Result<(), Box<dyn Error>> {
+    let data = collect_load_data()?;
+    let values = json!({ HEADER: data.to_json() });
+    write_json_to_file(|| Ok(values), LOGGER, HEADER)?;
+    Ok(())
 }

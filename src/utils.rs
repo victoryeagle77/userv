@@ -25,8 +25,8 @@ const LOGGER: &str = "log/error.log";
 /// # Returns
 ///
 /// * IO error message if log writing failed
-pub fn init_logger() -> Result<(), Box<dyn std::error::Error>> {
-    let logfile: FileAppender = FileAppender::builder()
+pub fn init_logger() -> Result<(), Box<dyn Error>> {
+    let logfile = FileAppender::builder()
         .encoder(Box::new(PatternEncoder::new("{d} {m} {n}")))
         .build(LOGGER)
         .unwrap();
@@ -122,53 +122,38 @@ pub fn parse_file_content(path: &str, seq: &str) -> Vec<(String, String)> {
 /// # Return
 ///
 /// - Custom error message if an error occurs during JSON data serialization or file handling.
-pub fn write_json_to_file<F>(generator: F, path: &str, header: &str)
+pub fn write_json_to_file<F>(generator: F, path: &str, header: &str) -> Result<(), Box<dyn Error>>
 where
     F: FnOnce() -> Result<Value, Box<dyn Error>>,
 {
-    let result: Result<(), Box<dyn Error>> = (|| -> Result<(), Box<dyn Error>> {
-        let mut data: Value = generator()?;
-        let timestamp: Option<String> =
-            Some(Utc::now().to_rfc3339_opts(Millis, true)).map_or_else(|| None, Some);
+    let mut data: Value = generator()?;
 
-        if data.is_object() {
-            data.as_object_mut()
-                .unwrap()
-                .insert("timestamp".to_string(), json!(timestamp));
-        } else if data.is_array() {
-            for item in data.as_array_mut().unwrap() {
-                if item.is_object() {
-                    item.as_object_mut()
-                        .unwrap()
-                        .insert("timestamp".to_string(), json!(timestamp));
-                }
+    // Timestamp implementation in JSON object
+    let timestamp = Some(Utc::now().to_rfc3339_opts(Millis, true));
+
+    // Format data to JSON object
+    if data.is_object() {
+        data.as_object_mut()
+            .unwrap()
+            .insert("timestamp".to_owned(), json!(timestamp));
+    } else if data.is_array() {
+        for item in data.as_array_mut().unwrap() {
+            if item.is_object() {
+                item.as_object_mut()
+                    .unwrap()
+                    .insert("timestamp".to_owned(), json!(timestamp));
             }
         }
-
-        let mut file: File = OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .create(true)
-            .open(path)
-            .map_err(|e| {
-                error!("[{header}] File 'Failed to open file {path}' : {e}");
-                e
-            })?;
-
-        let log_json_info: String = serde_json::to_string_pretty(&data).map_err(|e| {
-            error!("[{header}] Data 'Failed to serialize JSON data' : {e}");
-            e
-        })?;
-
-        file.write_all(log_json_info.as_bytes()).map_err(|e| {
-            error!("[{header}] File 'Failed to write to file {path}' : {e}");
-            e
-        })?;
-
-        Ok(())
-    })();
-
-    if let Err(e) = result {
-        error!("[{header}] File 'Failed to write JSON to file {path}' : {e}");
     }
+
+    let mut file = OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .create(true)
+        .open(path)?;
+    let log = serde_json::to_string_pretty(&data).map_err(|e| e)?;
+
+    file.write_all(log.as_bytes()).map_err(|e| e)?;
+
+    Ok(())
 }
