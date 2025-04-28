@@ -21,6 +21,12 @@ struct Cli {
     all: bool,
 }
 
+fn get_net_info_wrapper() {
+    if let Err(e) = net_info::get_net_info() {
+        error!("[NET_DATA] {e}");
+    }
+}
+
 fn main() {
     if let Err(e) = utils::init_logger() {
         println!("[LOGGER] INIT 'Failed to initialized error logger' : {e}");
@@ -35,7 +41,7 @@ fn main() {
         ("gpu", gpu_info::get_gpu_info),
         ("load", load_info::get_load_info),
         ("motherboard", motherboard_info::get_motherboard_info),
-        ("net", net_info::get_net_info),
+        ("net", get_net_info_wrapper),
         ("ram", ram_info::get_ram_info),
     ];
 

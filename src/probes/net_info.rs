@@ -2,103 +2,100 @@
 //!
 //! This module provides functionality to retrieve internet data consumption.
 
-use log::error;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::error::Error;
-use sysinfo::{NetworkExt, NetworksExt, System, SystemExt};
+use sysinfo::{NetworkExt, System, SystemExt};
 
 use crate::utils::write_json_to_file;
 
-const FACTOR: f32 = 1e6;
+const FACTOR: f64 = 1e6;
 
 const HEADER: &str = "NET_DATA";
 const LOGGER: &str = "log/net_data.json";
 
-/// Collection of collected network data.
+/// Collection of collected network data consumption.
 #[derive(Debug, Serialize)]
 struct NetworkInterface {
     /// Name of network interface.
     name: String,
-    /// Received network packages.
+    /// Received network packages in bytes.
     received: Option<u64>,
-    /// Transmitted network packages.
+    /// Transmitted network packages in bytes.
     transmitted: Option<u64>,
-    /// Total network packages.
+    /// Total network packages in bytes.
     total: Option<u64>,
 }
 
 impl NetworkInterface {
-    /// Converts `NetworkInterface` into a JSON object.
+    /// Convert bytes with a [`FACTOR`] size.
+    fn convert(opt: Option<u64>) -> Option<f64> {
+        opt.map(|v| v as f64 / FACTOR)
+    }
+
+    /// Converts [`NetworkInterface`] into a JSON object with MB values.
     fn to_json(&self) -> Value {
         json!({
-            "received_MB": self.received.map(|r| r as f32 / FACTOR),
-            "transmitted_MB": self.transmitted.map(|t| t as f32 / FACTOR),
-            "total_MB": self.total.map(|total| total as f32 / FACTOR)
+            "received_MB": Self::convert(self.received),
+            "transmitted_MB": Self::convert(self.transmitted),
+            "total_MB": Self::convert(self.total),
         })
     }
 }
 
-/// Function that retrieves detailed network interface data.
+/// Collects detailed network interface data.
 ///
 /// # Returns
 ///
-/// `result` : A vector of `NetworkInterface` structures with all network interface information:
-/// - Name of network interface.
-/// - Received network packages in bytes.
-/// - Transmitted network packages in bytes.
-/// - Total network packages calculated.
+/// A vector of [`NetworkInterface`] containing network data consumption.
 fn collect_interface_data() -> Result<Vec<NetworkInterface>, Box<dyn Error>> {
-    let mut system = System::new_all();
+    let mut system = System::new();
+    system.refresh_networks_list();
     system.refresh_networks();
 
-    let interfaces: Vec<NetworkInterface> = system
-        .networks()
-        .iter()
-        .map(|(name, data)| {
-            let received: Option<u64> = (data.total_received() > 0)
-                .then_some(data.total_received())
-                .or_else(|| {
-                    error!("[{HEADER}] Data 'Failed to retrieve received value for interface' {name}");
-                    None
-                });
+    let mut interfaces = Vec::new();
 
-            let transmitted: Option<u64> = (data.total_transmitted() > 0)
-                .then_some(data.total_transmitted())
-                .or_else(|| {
-                    error!("[{HEADER}] Data 'Failed to retrieve transmitted value for interface' {name}");
-                    None
-                });
+    for (name, data) in system.networks() {
+        let received = data.total_received();
+        let transmitted = data.total_transmitted();
 
-            NetworkInterface {
-                name: name.to_string(),
-                received,
-                transmitted,
-                total: received.and_then(|r: u64| transmitted.map(|t: u64| r + t)),
-            }
-        })
-        .collect();
+        // Ignoring network interface without traffic
+        if received == 0 && transmitted == 0 {
+            continue;
+        }
+
+        interfaces.push(NetworkInterface {
+            name: name.to_string(),
+            received: Some(received),
+            transmitted: Some(transmitted),
+            total: Some(received + transmitted),
+        });
+    }
 
     if interfaces.is_empty() {
-        error!("[{HEADER}] Data 'No valid network interfaces found'");
-        Err("No valid network interfaces found".into())
+        Err("Data 'No valid network interfaces found'".into())
     } else {
         Ok(interfaces)
     }
 }
 
-/// Public function used to send JSON formatted values,
-/// from `collect_interface_data` function result.
-pub fn get_net_info() {
-    let data = || -> Result<Value, Box<dyn Error>> {
-        let values: HashMap<_, _> = collect_interface_data()?
-            .into_iter()
-            .map(|interface: NetworkInterface| (interface.name.clone(), interface.to_json()))
-            .collect();
+/// Public function to gather network info and write it as JSON to file.
+///
+/// # Returns
+///
+/// Returns a Result to propagate errors.
+pub fn get_net_info() -> Result<(), Box<dyn Error>> {
+    let interfaces = collect_interface_data()?;
 
-        Ok(json!({ HEADER: values }))
-    };
+    let values: HashMap<_, _> = interfaces
+        .into_iter()
+        .map(|iface| (iface.name.clone(), iface.to_json()))
+        .collect();
 
-    write_json_to_file(data, LOGGER, HEADER);
+    let json_value = json!({ HEADER: values });
+
+    write_json_to_file(|| Ok(json_value), LOGGER, HEADER)?;
+
+    Ok(())
 }
