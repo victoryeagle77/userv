@@ -9,7 +9,7 @@ use crate::probes::{
     cpu_info, disk_info, gpu_info, load_info, motherboard_info, net_info, ram_info,
 };
 
-/// Structure de configuration des arguments CLI
+/// Configuration structure for CLI arguments
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
