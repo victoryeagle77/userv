@@ -56,7 +56,7 @@ fn main() {
 
     for handle in handles {
         match handle.join() {
-            Ok(_) => println!("Tâche terminée avec succès"),
+            Ok(_) => println!("Finished task with success"),
             Err(e) => error!("[MAIN] Process 'Failure in the thread' : {e:?}"),
         }
     }
