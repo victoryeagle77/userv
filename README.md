@@ -1,8 +1,12 @@
 # Userv
 
-This program providing functionalities to analyzing some parameters on a
-computer or IT equipment. With multiple microservices intended for Linux
-systems, this program retrieves various data like :
+This project involves analyzing the hardware of a computer equipment via a set
+of micro-services, and providing information on the energy consumption and
+health status of the components with the collected data.
+
+## Collected metrics
+
+Currently, we collect the following data :
 
 * GPU data
 * Processor data
