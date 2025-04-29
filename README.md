@@ -20,9 +20,9 @@ Currently, we collect the following data :
 
 * Network data
     Retrieves all available network interfaces on a computer device and collects their associated data :
-    * Interface MAC address.
-    * Interface name.
-    * Received data consumption in MB.
-    * Transmitted data consumption in MB.
+    - Interface MAC address.
+    - Interface name.
+    - Received data consumption in MB.
+    - Transmitted data consumption in MB.
 
 * System data
