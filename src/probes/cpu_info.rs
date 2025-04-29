@@ -34,7 +34,7 @@ struct CpuInfo {
     /// Logical CPU cores.
     cores_logic: Option<usize>,
     /// CPU usage cores in percentage.
-    cores_usage: Option<Vec<f32>>,
+    cores_usage: Option<Vec<(String, f32)>>,
     /// CPU temperatures by zone in °C.
     temperature: Option<Vec<(String, Option<f32>)>>,
     /// CPU energy consumption by zone in uJ.
@@ -57,22 +57,21 @@ impl CpuInfo {
     }
 }
 
-/// Retrieves the current CPU usage for all cores.
+/// Retrieves the current CPU usage by cores.
 /// This function uses the `sysinfo` crate to gather CPU usage information.
 /// It takes two snapshots of CPU usage with a 1-second interval between them,
 /// to calculate the current usage percentage for each CPU core.
 ///
 /// # Return
 ///
-/// A vector where each element represents the usage percentage of a CPU core.
-/// The order of the elements corresponds to the order of the CPU cores as reported by the system.
-/// If resources are not accessible, return an empty vector and log the error.
+/// - `result` : Vector where each element represents cores and its usage in percentage.
+/// - An empty vector if no thermal files or data are found.
 ///
 /// # Performance considerations
 ///
-/// This function introduces a 1-second delay due to the sleep between CPU usage snapshots.
+/// This function introduces a [`sysinfo::MINIMUM_CPU_UPDATE_INTERVAL`] delay due to the sleep between CPU usage snapshots.
 /// This delay is necessary to calculate an accurate usage percentage.
-fn get_cpu_usage() -> Result<Vec<f32>, Box<dyn Error>> {
+fn get_cpu_usage() -> Result<Vec<(String, f32)>, Box<dyn Error>> {
     let mut sys =
         System::new_with_specifics(RefreshKind::nothing().with_cpu(CpuRefreshKind::everything()));
     // Wait a bit because CPU usage is based on diff.
@@ -91,11 +90,13 @@ fn get_cpu_usage() -> Result<Vec<f32>, Box<dyn Error>> {
         .enumerate()
         .filter_map(|(core, cpu)| {
             let usage = cpu.cpu_usage();
+            let name = cpu.name().to_string();
+
             if usage.is_nan() || usage.is_infinite() {
                 error!("[{HEADER}] Data 'Invalid CPU usage for core {core}'");
                 None
             } else {
-                Some(usage)
+                Some((name, usage))
             }
         })
         .collect::<Vec<_>>();
@@ -107,7 +108,7 @@ fn get_cpu_usage() -> Result<Vec<f32>, Box<dyn Error>> {
     Ok(result)
 }
 
-/// Retrieves and displays CPU temperature information from the system.
+/// Retrieves CPU temperature information from the system.
 /// This function scans the thermal zones in the system (typically located in `/sys/class/thermal`)
 /// and attempts to read and display the temperature for each zone that starts with "thermal_zone".
 ///
