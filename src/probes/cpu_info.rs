@@ -132,7 +132,7 @@ fn get_cpu_temp() -> Result<Vec<(String, Option<f32>)>, Box<dyn Error>> {
                     None
                 }
             } else {
-                error!("[{HEADER}] Data 'Unable to get value for thermal zone ({name})'");
+                error!("[{HEADER}] Data 'Invalid temperature value for thermal zone ({name})'");
                 None
             }
         })
