@@ -124,12 +124,19 @@ fn get_cpu_temp() -> Result<Vec<(String, Option<f32>)>, Box<dyn Error>> {
             let name = component.label().to_string();
             let temperature = component.temperature();
 
-            if (name.to_lowercase().contains("cpu") || name.to_lowercase().contains("core"))
-                && temperature != Some(f32::NAN)
-            {
-                Some((name, temperature))
+            if name.to_lowercase().contains("cpu") || name.to_lowercase().contains("core") {
+                if let Some(temp) = temperature {
+                    if !temp.is_nan() {
+                        Some((name, Some(temp)))
+                    } else {
+                        error!("[{HEADER}] Data 'Unable to get value for thermal zone ({name})'");
+                        None
+                    }
+                } else {
+                    error!("[{HEADER}] Data 'Unable to get value for thermal zone ({name})'");
+                    None
+                }
             } else {
-                error!("[{HEADER}] Data 'Unable to get value for thermal zone ({name})'");
                 None
             }
         })
