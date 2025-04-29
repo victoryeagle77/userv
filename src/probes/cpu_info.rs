@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use std::{
     error::Error,
     fs::read_dir,
-    thread::{self, sleep},
+    thread::sleep,
     time::{Duration, Instant},
 };
 use sysinfo::{Components, CpuRefreshKind, RefreshKind, System};
@@ -75,7 +75,7 @@ fn get_cpu_usage() -> Result<Vec<(String, f32)>, Box<dyn Error>> {
     let mut sys =
         System::new_with_specifics(RefreshKind::nothing().with_cpu(CpuRefreshKind::everything()));
     // Wait a bit because CPU usage is based on diff.
-    thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
+    sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
     // Refresh CPUs again to get actual value.
     sys.refresh_cpu_usage();
 
