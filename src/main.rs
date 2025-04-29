@@ -6,7 +6,7 @@ mod probes;
 mod utils;
 
 use crate::probes::{
-    cpu_info, disk_info, gpu_info, load_info, motherboard_info, net_info, ram_info,
+    cpu_info, disk_info, gpu_info, motherboard_info, net_info, ram_info, system_info,
 };
 
 /// Configuration structure for CLI arguments
@@ -21,21 +21,29 @@ struct Cli {
     all: bool,
 }
 
-fn get_load_info_wrapper() {
-    if let Err(e) = load_info::get_load_info() {
-        error!("[LOAD_SYSTEM] {e}");
+fn get_cpu_info_wrapper() {
+    if let Err(e) = cpu_info::get_cpu_info() {
+        error!("[MOTHERBOARD] {e}");
     }
 }
-
+fn get_motherboard_info_wrapper() {
+    if let Err(e) = motherboard_info::get_motherboard_info() {
+        error!("[MOTHERBOARD] {e}");
+    }
+}
 fn get_net_info_wrapper() {
     if let Err(e) = net_info::get_net_info() {
         error!("[NET_DATA] {e}");
     }
 }
-
 fn get_ram_info_wrapper() {
     if let Err(e) = ram_info::get_ram_info() {
         error!("[RAM] {e}");
+    }
+}
+fn get_system_info_wrapper() {
+    if let Err(e) = system_info::get_system_info() {
+        error!("[SYSTEM] {e}");
     }
 }
 
@@ -48,13 +56,13 @@ fn main() {
     let mut handles: Vec<thread::JoinHandle<()>> = vec![];
     let cli = Cli::parse();
     let map: Vec<(&str, fn())> = vec![
-        ("cpu", cpu_info::get_cpu_info),
+        ("cpu", get_cpu_info_wrapper),
         ("disk", disk_info::get_disk_info),
         ("gpu", gpu_info::get_gpu_info),
-        ("load", get_load_info_wrapper),
-        ("motherboard", motherboard_info::get_motherboard_info),
+        ("motherboard", get_motherboard_info_wrapper),
         ("net", get_net_info_wrapper),
         ("ram", get_ram_info_wrapper),
+        ("system", get_system_info_wrapper),
     ];
 
     if cli.all {
@@ -67,7 +75,9 @@ fn main() {
                 handles.push(thread::spawn(probe));
             } else {
                 println!("[MAIN] Arguments 'Unknown component' : {component}");
-                println!(" >> Available arguments : (cpu, disk, gpu, load, motherboard, net, ram)");
+                println!(
+                    " >> Available arguments : (cpu, disk, gpu, system, motherboard, net, ram)"
+                );
             }
         }
     }

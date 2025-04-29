@@ -256,5 +256,5 @@ pub fn get_gpu_info() {
         Ok(json!(values))
     };
 
-    write_json_to_file(data, LOGGER, HEADER);
+    write_json_to_file(data, LOGGER);
 }

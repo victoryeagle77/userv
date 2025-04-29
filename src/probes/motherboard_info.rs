@@ -5,9 +5,9 @@
 use log::error;
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::{collections::HashMap, error::Error};
+use std::{collections::HashMap, error::Error, fs::read_to_string};
 
-use crate::utils::{read_file_content, write_json_to_file};
+use crate::utils::write_json_to_file;
 
 const HEADER: &str = "MOTHERBOARD";
 const LOGGER: &str = "log/motherboard_data.json";
@@ -37,7 +37,7 @@ struct MotherboardInfo {
 }
 
 impl MotherboardInfo {
-    /// Converts `MotherboardInfo` into a JSON object.
+    /// Converts [`MotherboardInfo`] into a JSON object.
     fn to_json(&self) -> Value {
         json!({
             "motherboard_name": self.board_name,
@@ -50,6 +50,32 @@ impl MotherboardInfo {
             "bios_vendor": self.bios_vendor,
         })
     }
+
+    /// Check if we have no information available to store in [`MotherboardInfo`].
+    fn is_empty(&self) -> bool {
+        self.board_name.is_none()
+            && self.board_serial.is_none()
+            && self.board_version.is_none()
+            && self.board_vendor.is_none()
+            && self.bios_date.is_none()
+            && self.bios_release.is_none()
+            && self.bios_vendor.is_none()
+            && self.bios_version.is_none()
+    }
+
+    /// Filling all field of [`MotherboardInfo`] with null value by default.
+    fn default() -> Self {
+        MotherboardInfo {
+            board_name: None,
+            board_serial: None,
+            board_version: None,
+            board_vendor: None,
+            bios_date: None,
+            bios_release: None,
+            bios_vendor: None,
+            bios_version: None,
+        }
+    }
 }
 
 /// Retrieves data of the main motherboard.
@@ -57,51 +83,32 @@ impl MotherboardInfo {
 ///
 /// # Returns
 ///
-/// - `HashMap<String, String>`: Each element found for motherboard info.
+/// - `data`: Each element found for motherboard info.
 fn read_dmi_data() -> HashMap<String, String> {
-    MOTHERBOARD_FILES
-        .iter()
-        .filter_map(|&path| match read_file_content(path) {
-            Some(content) => {
-                let key: &str = path.split('/').next_back().unwrap_or("");
-                Some((key.to_string(), content.trim().to_string()))
+    let mut data = HashMap::new();
+    for &path in MOTHERBOARD_FILES.iter() {
+        match read_to_string(path) {
+            Ok(content) => {
+                let key = path.rsplit('/').next().unwrap_or_default();
+                data.insert(key.to_string(), content.trim().to_string());
             }
-            None => {
-                error!("[{HEADER}] Data 'Failed to parse file' : {path}");
-                None
+            Err(e) => {
+                error!("[{HEADER}] Data 'Failed to read DMI file' {path} : {e}");
             }
-        })
-        .collect()
+        }
+    }
+    data
 }
 
-/// Function that retrieves detailed motherboard information,
-/// By dmi files system reading and data collecting.
+/// Retrieves information about the motherboard of an IT equipment.
 ///
 /// # Returns
 ///
-/// `Result<MotherboardInfo, String>`: Completed `MotherboardInfo` structure with all motherboard information
-///
-/// - Motherboard name
-/// - Motherboard serial number
-/// - Motherboard version
-/// - Motherboard vendor
-/// - Bios update
-/// - Bios date release
-/// - Bios vendor
-/// - Bios version
-fn collect_motherboard_data() -> MotherboardInfo {
-    let dmi_info: HashMap<String, String> = read_dmi_data();
-
-    let mut data: MotherboardInfo = MotherboardInfo {
-        board_name: None,
-        board_serial: None,
-        board_version: None,
-        board_vendor: None,
-        bios_date: None,
-        bios_release: None,
-        bios_vendor: None,
-        bios_version: None,
-    };
+/// - Completed [`MotherboardInfo`] structure with all board and BIOS information.
+/// - An error when no information about BIOS or Motherboard found.
+fn collect_motherboard_data() -> Result<MotherboardInfo, Box<dyn Error>> {
+    let dmi_info = read_dmi_data();
+    let mut data = MotherboardInfo::default();
 
     for (key, value) in dmi_info.iter() {
         match key.as_str() {
@@ -113,46 +120,40 @@ fn collect_motherboard_data() -> MotherboardInfo {
             "bios_release" => data.bios_release = Some(value.clone()),
             "bios_vendor" => data.bios_vendor = Some(value.clone()),
             "bios_version" => data.bios_version = Some(value.clone()),
-            _ => error!("[{HEADER}] Unknown DMI key: {key}"),
+            _ => error!("[{HEADER}] Data 'Unknown DMI key' : {key}"),
         }
     }
 
-    // Log missing information
+    if data.is_empty() {
+        return Err("Data 'No information about BIOS or Motherboard found'".into());
+    }
+
     if data.board_name.is_none() {
         error!("[{HEADER}] Data 'Failed to retrieve motherboard name'");
-    }
-    if data.board_serial.is_none() {
+    } else if data.board_serial.is_none() {
         error!("[{HEADER}] Data 'Failed to retrieve motherboard serial'");
-    }
-    if data.board_version.is_none() {
+    } else if data.board_version.is_none() {
         error!("[{HEADER}] Data 'Failed to retrieve motherboard version'");
-    }
-    if data.board_vendor.is_none() {
+    } else if data.board_vendor.is_none() {
         error!("[{HEADER}] Data 'Failed to retrieve motherboard vendor'");
-    }
-    if data.bios_date.is_none() {
+    } else if data.bios_date.is_none() {
         error!("[{HEADER}] Data 'Failed to retrieve BIOS date'");
-    }
-    if data.bios_release.is_none() {
+    } else if data.bios_release.is_none() {
         error!("[{HEADER}] Data 'Failed to retrieve BIOS release'");
-    }
-    if data.bios_vendor.is_none() {
+    } else if data.bios_vendor.is_none() {
         error!("[{HEADER}] Data 'Failed to retrieve BIOS vendor'");
-    }
-    if data.bios_version.is_none() {
+    } else if data.bios_version.is_none() {
         error!("[{HEADER}] Data 'Failed to retrieve BIOS version'");
     }
 
-    data
+    Ok(data)
 }
 
 /// Public function used to send JSON formatted values,
-/// from `collect_motherboard_data` function result.
-pub fn get_motherboard_info() {
-    let data = || -> Result<Value, Box<dyn Error>> {
-        let values: MotherboardInfo = collect_motherboard_data();
-        Ok(json!({ HEADER: values.to_json() }))
-    };
-
-    write_json_to_file(data, LOGGER, HEADER);
+/// from [`collect_motherboard_data`] function result.
+pub fn get_motherboard_info() -> Result<(), Box<dyn Error>> {
+    let data = collect_motherboard_data()?;
+    let values = json!({ HEADER: data.to_json() });
+    write_json_to_file(|| Ok(values), LOGGER)?;
+    Ok(())
 }

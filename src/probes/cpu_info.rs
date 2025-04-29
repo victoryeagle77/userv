@@ -7,13 +7,11 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use std::{
     error::Error,
-    ffi::OsStr,
-    fs,
-    path::PathBuf,
+    fs::read_dir,
     thread::{self, sleep},
     time::{Duration, Instant},
 };
-use sysinfo::{Component, Components, CpuRefreshKind, RefreshKind, System};
+use sysinfo::{Components, CpuRefreshKind, RefreshKind, System};
 
 use crate::utils::{read_file_content, write_json_to_file};
 
@@ -38,13 +36,13 @@ struct CpuInfo {
     /// CPU usage cores in percentage.
     cores_usage: Option<Vec<f32>>,
     /// CPU temperatures by zone in °C.
-    temperature: Option<Vec<(String, f32)>>,
+    temperature: Option<Vec<(String, Option<f32>)>>,
     /// CPU energy consumption by zone in uJ.
     power: Option<Vec<(String, f64)>>,
 }
 
 impl CpuInfo {
-    /// Converts the `CpuInfo` structure into a JSON value.
+    /// Converts the [`CpuInfo`] structure into a JSON value.
     fn to_json(&self) -> Value {
         json!({
             "model": self.model,
@@ -74,33 +72,39 @@ impl CpuInfo {
 ///
 /// This function introduces a 1-second delay due to the sleep between CPU usage snapshots.
 /// This delay is necessary to calculate an accurate usage percentage.
-fn get_cpu_usage() -> Result<Vec<f32>, String> {
-    let mut sys = System::new_with_specifics(RefreshKind::nothing().with_cpu(CpuRefreshKind::everything()),);
+fn get_cpu_usage() -> Result<Vec<f32>, Box<dyn Error>> {
+    let mut sys =
+        System::new_with_specifics(RefreshKind::nothing().with_cpu(CpuRefreshKind::everything()));
     // Wait a bit because CPU usage is based on diff.
     thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
     // Refresh CPUs again to get actual value.
     sys.refresh_cpu_usage();
 
-    let cpus= sys.cpus();
+    let cpus = sys.cpus();
 
     if cpus.is_empty() {
-        error!("[{HEADER}] Data 'Unable to get CPU core information'");
-        return Err("Unable to get CPU core information".to_string());
+        return Err("Unable to get CPU core".to_string().into());
     }
 
-    Ok(cpus
+    let result = cpus
         .iter()
         .enumerate()
-        .filter_map(|(index, cpu)| {
-            let usage: f32 = cpu.cpu_usage();
+        .filter_map(|(core, cpu)| {
+            let usage = cpu.cpu_usage();
             if usage.is_nan() || usage.is_infinite() {
-                error!("[{HEADER}] Data 'Invalid CPU usage for core {index}'");
+                error!("[{HEADER}] Data 'Invalid CPU usage for core {core}'");
                 None
             } else {
                 Some(usage)
             }
         })
-        .collect())
+        .collect::<Vec<_>>();
+
+    if result.is_empty() {
+        return Err("Unable to get CPU usage information".to_string().into());
+    }
+
+    Ok(result)
 }
 
 /// Retrieves and displays CPU temperature information from the system.
@@ -111,29 +115,33 @@ fn get_cpu_usage() -> Result<Vec<f32>, String> {
 ///
 /// - `result` : Vector where each element represents cores and its thermal state in Celsius.
 /// - An empty vector if no thermal files or data are found.
-fn get_cpu_temp() -> Result<Vec<(String, f32)>, String> {
+fn get_cpu_temp() -> Result<Vec<(String, Option<f32>)>, Box<dyn Error>> {
     let components = Components::new_with_refreshed_list();
 
-    let temps = components
-        .components()
+    let result = components
         .iter()
-        .filter_map(|component: &Component| {
+        .filter_map(|component| {
             let name = component.label().to_string();
             let temperature = component.temperature();
-            if name.to_lowercase().contains("cpu") || name.to_lowercase().contains("core") {
+
+            if (name.to_lowercase().contains("cpu") || name.to_lowercase().contains("core"))
+                && temperature != Some(f32::NAN)
+            {
                 Some((name, temperature))
             } else {
+                error!("[{HEADER}] Data 'Unable to get value for thermal zone ({name})'");
                 None
             }
         })
-        .collect();
+        .collect::<Vec<_>>();
 
-    if temps.is_empty() {
-        error!("[{HEADER}] Data 'Unable to get valid CPU temperature information'");
-        return Err("Unable to get valid CPU temperature information".to_string());
+    if result.is_empty() {
+        return Err("Unable to get CPU temperature information"
+            .to_string()
+            .into());
     }
 
-    Ok(temps)
+    Ok(result)
 }
 
 /// Function reading in RAPL directory : `/sys/class/powercap/`,
@@ -143,28 +151,27 @@ fn get_cpu_temp() -> Result<Vec<(String, f32)>, String> {
 ///
 /// - `result` : Vector containing CPU zone name and its consumption.
 /// - An empty vector if no energy consumption file or data are found.
-fn get_cpu_consumption() -> Result<Vec<(String, f64)>, String> {
-    let mut result: Vec<(String, f64)> = Vec::new();
-    let start_time: Instant = Instant::now();
+fn get_cpu_consumption() -> Result<Vec<(String, f64)>, Box<dyn Error>> {
+    let mut result = Vec::new();
+    let start_time = Instant::now();
 
-    if let Ok(entries) = fs::read_dir(RAPL) {
+    if let Ok(entries) = read_dir(RAPL) {
         for entry in entries.flatten() {
-            let path: PathBuf = entry.path();
+            let path = entry.path();
             if path.is_dir() {
-                if let Some(domain) = path.file_name().and_then(|name: &OsStr| name.to_str()) {
+                if let Some(domain) = path.file_name().and_then(|name| name.to_str()) {
                     if domain.starts_with("intel-rapl:") {
                         if let Some(start_energy) =
                             read_file_content(path.join("energy_uj").to_str().unwrap())
-                                .and_then(|content: String| content.trim().parse::<f64>().ok())
+                                .and_then(|content| content.trim().parse::<f64>().ok())
                         {
                             sleep(Duration::from_secs(1));
                             if let Some(end_energy) =
                                 read_file_content(path.join("energy_uj").to_str().unwrap())
-                                    .and_then(|content: String| content.trim().parse::<f64>().ok())
+                                    .and_then(|content| content.trim().parse::<f64>().ok())
                             {
-                                let elapsed: f64 = start_time.elapsed().as_secs_f64();
-                                let power: f64 =
-                                    (end_energy - start_energy) / (elapsed * 1_000_000.0);
+                                let elapsed = start_time.elapsed().as_secs_f64();
+                                let power = (end_energy - start_energy) / (elapsed * 1_000_000.0);
                                 result.push((domain.to_string(), power));
                             }
                         }
@@ -175,8 +182,9 @@ fn get_cpu_consumption() -> Result<Vec<(String, f64)>, String> {
     }
 
     if result.is_empty() {
-        error!("[{HEADER}] Data 'Unable to get valid CPU power consumption information'");
-        return Err("Unable to get valid CPU power consumption information".to_string());
+        return Err("Unable to get CPU power consumption information"
+            .to_string()
+            .into());
     }
 
     Ok(result)
@@ -187,24 +195,18 @@ fn get_cpu_consumption() -> Result<Vec<(String, f64)>, String> {
 ///
 /// # Return
 ///
-/// `result` : Completed `CpuInfo` structure with all cpu information
-/// - CPU full model name
-/// - CPU general generation
-/// - CPU family specific model number
-/// - CPU operating frequency
-/// - CPU physical cores that are the actual processing units on the chip
-/// - CPU logical cores that includes physical and virtual cores
-/// - CPU detailed core usage
-fn collect_cpu_data() -> CpuInfo {
+/// - Completed [`CpuInfo`] structure with all retrieved and computing CPU information.
+/// - An error when some important and critical metrics can't be retrieved.
+fn collect_cpu_data() -> Result<CpuInfo, Box<dyn Error>> {
     let mut sys: System = System::new_all();
     sys.refresh_cpu_all();
 
-    let cpu: Option<&sysinfo::Cpu> = sys.cpus().first();
+    let cpu = sys.cpus().first();
 
-    CpuInfo {
-        model: cpu.map(|c: &sysinfo::Cpu| c.brand().to_string()),
-        family: cpu.map(|c: &sysinfo::Cpu| c.vendor_id().to_string()),
-        frequency: cpu.map(|c: &sysinfo::Cpu| c.frequency().to_string()),
+    Ok(CpuInfo {
+        model: cpu.map(|c| c.brand().to_string()),
+        family: cpu.map(|c| c.vendor_id().to_string()),
+        frequency: cpu.map(|c| c.frequency().to_string()),
         cores_physic: sys.physical_core_count(),
         cores_logic: Some(sys.cpus().len()),
         cores_usage: match get_cpu_usage() {
@@ -228,16 +230,14 @@ fn collect_cpu_data() -> CpuInfo {
                 None
             }
         },
-    }
+    })
 }
 
 /// Public function used to send JSON formatted values,
-/// from `collect_cpu_data` function result.
-pub fn get_cpu_info() {
-    let data = || -> Result<Value, Box<dyn Error>> {
-        let values: CpuInfo = collect_cpu_data();
-        Ok(json!({ HEADER: values.to_json() }))
-    };
-
-    write_json_to_file(data, LOGGER, HEADER);
+/// from [`collect_cpu_data`] function result.
+pub fn get_cpu_info() -> Result<(), Box<dyn Error>> {
+    let data = collect_cpu_data()?;
+    let values = json!({ HEADER: data.to_json() });
+    write_json_to_file(|| Ok(values), LOGGER)?;
+    Ok(())
 }

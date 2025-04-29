@@ -107,7 +107,8 @@ fn get_ram_test() -> Result<(Option<f64>, Option<f64>), Box<dyn Error>> {
 ///
 /// # Returns
 ///
-/// `result` : Completed [`RAMInfo`] structure with all computing memory information
+/// - Completed [`RAMInfo`] structure with all computing memory information.
+/// - An error when some important and critical metrics can't be retrieved.
 fn collect_ram_data() -> Result<RAMInfo, Box<dyn Error>> {
     let mut sys = System::new_all();
     sys.refresh_memory();
@@ -149,13 +150,9 @@ fn collect_ram_data() -> Result<RAMInfo, Box<dyn Error>> {
 
 /// Public function used to send JSON formatted values,
 /// from [`collect_ram_data`] function result.
-///
-/// # Returns
-///
-/// Returns a Result to propagate errors.
 pub fn get_ram_info() -> Result<(), Box<dyn Error>> {
     let data = collect_ram_data()?;
     let values = json!({ HEADER: data.to_json() });
-    write_json_to_file(|| Ok(values), LOGGER, HEADER)?;
+    write_json_to_file(|| Ok(values), LOGGER)?;
     Ok(())
 }

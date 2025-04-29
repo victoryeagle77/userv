@@ -249,25 +249,10 @@ fn collect_partitions(device: &str) -> Result<Vec<PartitionInfo>, String> {
 ///
 /// # Returns
 ///
-/// `result` : The compilation of completed structures concerning all disk information.
-///
-/// * `DiskInfo` structure :
-/// > - Path in system attached to device memory
-/// > - Space of the disk
-/// > - Disk model name
-/// > - Disk type (HDD or SSD)
-/// > - Disk partitions list
-///
-/// * `PartitionInfo` structure :
-/// > - Disk partition path name
-/// > - Space on the partition disk
-///
-/// * `SmartInfo` structure :
-/// > - Disk uptime power on hours
-/// > - Disk health status
-/// > - Reallocated sectors on the disk
-/// > - Current pending sectors on the disk
-/// > - Disk temperature
+/// The compilation of completed structures concerning all disk information.
+/// * [`DiskInfo`] structure
+/// * [`PartitionInfo`] structure
+/// * [`SmartInfo`] structure
 fn collect_disk_data() -> Result<Vec<DiskInfo>, String> {
     let content: String =
         read_file_content(PARTITIONS).ok_or_else(|| "Unable to read partition file".to_string())?;
@@ -318,7 +303,7 @@ fn collect_disk_data() -> Result<Vec<DiskInfo>, String> {
 }
 
 /// Public function used to send JSON formatted values,
-/// from `collect_disk_data` function result.
+/// from [`collect_disk_data`] function result.
 pub fn get_disk_info() {
     let data = || -> Result<Value, Box<dyn Error>> {
         collect_disk_data()
@@ -330,5 +315,5 @@ pub fn get_disk_info() {
             .map_err(|e: String| e.into())
     };
 
-    write_json_to_file(data, LOGGER, HEADER);
+    write_json_to_file(data, LOGGER);
 }

@@ -13,18 +13,19 @@ use log4rs::{
 use serde_json::{json, Value};
 use std::{
     error::Error,
+    fs::write,
     fs::File,
     fs::OpenOptions,
-    io::{BufRead, BufReader, Read, Write},
+    io::{Read, Write},
 };
 
 const LOGGER: &str = "log/error.log";
 
-/// Initialization and formatting of logged information during execution.
+/// Initialization and formatting information logger to store messages concerning microservices behavior.
 ///
 /// # Returns
 ///
-/// * IO error message if log writing failed
+/// IO error message if log writing failed
 pub fn init_logger() -> Result<(), Box<dyn Error>> {
     let logfile = FileAppender::builder()
         .encoder(Box::new(PatternEncoder::new("{d} {m} {n}")))
@@ -43,8 +44,9 @@ pub fn init_logger() -> Result<(), Box<dyn Error>> {
                 .build(LevelFilter::Error),
         )?;
 
-    std::fs::write(LOGGER, "")?;
+    write(LOGGER, "")?;
     log4rs::init_config(config)?;
+
     Ok(())
 }
 
@@ -76,53 +78,17 @@ pub fn read_file_content(path: &str) -> Option<String> {
     }
 }
 
-/// Parses a file and extracts key-value pairs separated by a colon.
-/// This function reads a file line by line and splits each line at the first colon (':').
-/// Both the key and value are trimmed of whitespace.
-///
-/// # Arguments
-///
-/// * `path` - A string slice that holds the path to the file to be parsed.
-/// * `seq` - Char or string identifier in file to determine data sequencing
-///
-/// # Returns
-///
-/// If the file cannot be opened or read, an empty vector is returned.
-/// A `Vec<(String, String)>` where each tuple represents a key-value pair found in the file.
-/// If the file cannot be opened or read, an error message is logged,
-/// but the function will still return an empty vector.
-pub fn parse_file_content(path: &str, seq: &str) -> Vec<(String, String)> {
-    match File::open(path) {
-        Ok(file) => {
-            let reader: BufReader<File> = BufReader::new(file);
-            reader
-                .lines()
-                .map_while(Result::ok)
-                .filter_map(|line: String| {
-                    line.split_once(seq)
-                        .map(|(key, value)| (key.trim().to_string(), value.trim().to_string()))
-                })
-                .collect()
-        }
-        Err(e) => {
-            error!("[FILE_ERROR] File '{path}' : {e}");
-            Vec::new()
-        }
-    }
-}
-
 /// Writes JSON formatted data in a file
 ///
 /// # Arguments
 ///
 /// * `data` : JSON serialized collected metrics data to write
 /// * `path` : File path use to writing data
-/// * `header` : JSON element to define the type of retrieved and written data
 ///
 /// # Return
 ///
 /// - Custom error message if an error occurs during JSON data serialization or file handling.
-pub fn write_json_to_file<F>(generator: F, path: &str, header: &str) -> Result<(), Box<dyn Error>>
+pub fn write_json_to_file<F>(generator: F, path: &str) -> Result<(), Box<dyn Error>>
 where
     F: FnOnce() -> Result<Value, Box<dyn Error>>,
 {
@@ -151,9 +117,9 @@ where
         .truncate(true)
         .create(true)
         .open(path)?;
-    let log = serde_json::to_string_pretty(&data).map_err(|e| e)?;
+    let log = serde_json::to_string_pretty(&data)?;
 
-    file.write_all(log.as_bytes()).map_err(|e| e)?;
+    file.write_all(log.as_bytes())?;
 
     Ok(())
 }
