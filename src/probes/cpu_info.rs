@@ -8,10 +8,10 @@ use serde_json::{json, Value};
 use std::{
     error::Error,
     fs::read_dir,
-    thread::{self, sleep},
+    thread::sleep,
     time::{Duration, Instant},
 };
-use sysinfo::{Components, CpuRefreshKind, RefreshKind, System};
+use sysinfo::{Components, Cpu, CpuRefreshKind, RefreshKind, System};
 
 use crate::utils::{read_file_content, write_json_to_file};
 
@@ -34,7 +34,7 @@ struct CpuInfo {
     /// Logical CPU cores.
     cores_logic: Option<usize>,
     /// CPU usage cores in percentage.
-    cores_usage: Option<Vec<f32>>,
+    cores_usage: Option<Vec<(String, f32)>>,
     /// CPU temperatures by zone in °C.
     temperature: Option<Vec<(String, Option<f32>)>>,
     /// CPU energy consumption by zone in uJ.
@@ -45,69 +45,59 @@ impl CpuInfo {
     /// Converts the [`CpuInfo`] structure into a JSON value.
     fn to_json(&self) -> Value {
         json!({
-            "model": self.model,
+            "cores_physical": self.cores_physic,
+            "cores_logical": self.cores_logic,
+            "core_usage_%": self.cores_usage,
             "family": self.family,
             "frequency_MHz": self.frequency,
-            "physical_cores": self.cores_physic,
-            "logical_cores": self.cores_logic,
-            "core_usage_%": self.cores_usage,
-            "temperatures_°C": self.temperature,
+            "model": self.model,
             "power_consumption_W": self.power,
+            "temperatures_°C": self.temperature,
         })
     }
 }
 
-/// Retrieves the current CPU usage for all cores.
+/// Retrieves the current CPU usage by cores.
 /// This function uses the `sysinfo` crate to gather CPU usage information.
 /// It takes two snapshots of CPU usage with a 1-second interval between them,
 /// to calculate the current usage percentage for each CPU core.
 ///
 /// # Return
 ///
-/// A vector where each element represents the usage percentage of a CPU core.
-/// The order of the elements corresponds to the order of the CPU cores as reported by the system.
-/// If resources are not accessible, return an empty vector and log the error.
+/// - `result` : Vector where each element represents cores and its usage in percentage.
+/// - An empty vector if no thermal files or data are found.
 ///
 /// # Performance considerations
 ///
-/// This function introduces a 1-second delay due to the sleep between CPU usage snapshots.
+/// This function introduces a [`sysinfo::MINIMUM_CPU_UPDATE_INTERVAL`] delay due to the sleep between CPU usage snapshots.
 /// This delay is necessary to calculate an accurate usage percentage.
-fn get_cpu_usage() -> Result<Vec<f32>, Box<dyn Error>> {
-    let mut sys =
-        System::new_with_specifics(RefreshKind::nothing().with_cpu(CpuRefreshKind::everything()));
-    // Wait a bit because CPU usage is based on diff.
-    thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
-    // Refresh CPUs again to get actual value.
-    sys.refresh_cpu_usage();
-
-    let cpus = sys.cpus();
-
-    if cpus.is_empty() {
-        return Err("Unable to get CPU core".to_string().into());
-    }
-
+fn get_cpu_usage(cpus: &[Cpu]) -> Result<Vec<(String, f32)>, Box<dyn Error>> {
     let result = cpus
         .iter()
         .enumerate()
         .filter_map(|(core, cpu)| {
             let usage = cpu.cpu_usage();
+            let name = cpu.name().to_string();
+
             if usage.is_nan() || usage.is_infinite() {
                 error!("[{HEADER}] Data 'Invalid CPU usage for core {core}'");
                 None
             } else {
-                Some(usage)
+                Some((name, usage))
             }
         })
         .collect::<Vec<_>>();
 
     if result.is_empty() {
-        return Err("Unable to get CPU usage information".to_string().into());
+        return Err("Data 'Unable to get CPU usage information'"
+            .to_string()
+            .into());
     }
 
     Ok(result)
 }
 
-/// Retrieves and displays CPU temperature information from the system.
+/// Retrieves CPU temperature information from the system.
 /// This function scans the thermal zones in the system (typically located in `/sys/class/thermal`)
 /// and attempts to read and display the temperature for each zone that starts with "thermal_zone".
 ///
@@ -124,19 +114,22 @@ fn get_cpu_temp() -> Result<Vec<(String, Option<f32>)>, Box<dyn Error>> {
             let name = component.label().to_string();
             let temperature = component.temperature();
 
-            if (name.to_lowercase().contains("cpu") || name.to_lowercase().contains("core"))
-                && temperature != Some(f32::NAN)
-            {
-                Some((name, temperature))
+            if let Some(temp) = temperature {
+                if !temp.is_nan() {
+                    Some((name, Some(temp)))
+                } else {
+                    error!("[{HEADER}] Data 'Unable to get value for thermal zone ({name})'");
+                    None
+                }
             } else {
-                error!("[{HEADER}] Data 'Unable to get value for thermal zone ({name})'");
+                error!("[{HEADER}] Data 'Invalid temperature value for thermal zone ({name})'");
                 None
             }
         })
         .collect::<Vec<_>>();
 
     if result.is_empty() {
-        return Err("Unable to get CPU temperature information"
+        return Err("Data 'Unable to get CPU temperature information'"
             .to_string()
             .into());
     }
@@ -182,7 +175,7 @@ fn get_cpu_consumption() -> Result<Vec<(String, f64)>, Box<dyn Error>> {
     }
 
     if result.is_empty() {
-        return Err("Unable to get CPU power consumption information"
+        return Err("Data 'Unable to get CPU power consumption information'"
             .to_string()
             .into());
     }
@@ -198,38 +191,38 @@ fn get_cpu_consumption() -> Result<Vec<(String, f64)>, Box<dyn Error>> {
 /// - Completed [`CpuInfo`] structure with all retrieved and computing CPU information.
 /// - An error when some important and critical metrics can't be retrieved.
 fn collect_cpu_data() -> Result<CpuInfo, Box<dyn Error>> {
-    let mut sys: System = System::new_all();
+    let mut sys =
+        System::new_with_specifics(RefreshKind::nothing().with_cpu(CpuRefreshKind::everything()));
+    // Wait a bit because CPU usage is based on diff.
+    sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
+    // Refresh CPUs again to get actual value.
     sys.refresh_cpu_all();
 
-    let cpu = sys.cpus().first();
+    let cpus = sys.cpus();
+    if cpus.is_empty() {
+        return Err("Failed to get global CPUs information".to_string().into());
+    }
+
+    let cores_physic = sys.physical_core_count();
+    let cores_logic = Some(cpus.len());
+
+    let model = cpus.first().map(|c| c.brand().to_string());
+    let family = cpus.first().map(|c| c.vendor_id().to_string());
+    let frequency = cpus.first().map(|c| c.frequency().to_string());
+
+    let cores_usage = Some(get_cpu_usage(cpus)?);
+    let power = Some(get_cpu_consumption()?);
+    let temperature = Some(get_cpu_temp()?);
 
     Ok(CpuInfo {
-        model: cpu.map(|c| c.brand().to_string()),
-        family: cpu.map(|c| c.vendor_id().to_string()),
-        frequency: cpu.map(|c| c.frequency().to_string()),
-        cores_physic: sys.physical_core_count(),
-        cores_logic: Some(sys.cpus().len()),
-        cores_usage: match get_cpu_usage() {
-            Ok(data) => Some(data),
-            Err(e) => {
-                error!("[{HEADER}] Data '{e}'");
-                None
-            }
-        },
-        temperature: match get_cpu_temp() {
-            Ok(data) => Some(data),
-            Err(e) => {
-                error!("[{HEADER}] Data '{e}'");
-                None
-            }
-        },
-        power: match get_cpu_consumption() {
-            Ok(data) => Some(data),
-            Err(e) => {
-                error!("[{HEADER}] Data '{e}'");
-                None
-            }
-        },
+        cores_physic,
+        cores_logic,
+        cores_usage,
+        family,
+        frequency,
+        model,
+        power,
+        temperature,
     })
 }
 

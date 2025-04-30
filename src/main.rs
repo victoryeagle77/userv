@@ -23,7 +23,7 @@ struct Cli {
 
 fn get_cpu_info_wrapper() {
     if let Err(e) = cpu_info::get_cpu_info() {
-        error!("[MOTHERBOARD] {e}");
+        error!("[CPU] {e}");
     }
 }
 fn get_motherboard_info_wrapper() {
