@@ -134,7 +134,7 @@ fn get_cpu_temperature() -> Result<Vec<(String, f32)>, Box<dyn Error>> {
     }
 }
 
-/// Function reading in RAPL directory : `/sys/class/powercap/`,
+/// Function reading in RAPL directory `/sys/class/powercap/`,
 /// to get consumption data in locate each CPU zone to get specific energy consumption.
 ///
 /// # Return
