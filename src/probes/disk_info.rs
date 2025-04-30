@@ -174,13 +174,7 @@ fn get_disk_test(path: &str) -> Option<(f64, f64)> {
 ///
 /// # Returns
 ///
-/// * `SmartInfo` structure :
-/// > - Disk uptime power on hours
-/// > - Disk health status
-/// > - Reallocated sectors on the disk
-/// > - Current pending sectors on the disk
-/// > - Disk temperature
-///
+/// - [`SmartInfo`] structure
 /// - Error message if CString can not be created, file descriptor content or final extracted data are null.
 fn collect_smart_data(path: &str) -> Result<SmartInfo, String> {
     let device: CString = CString::new(path).map_err(|_| "Failed to create CString".to_string())?;
@@ -254,6 +248,18 @@ fn collect_partitions(device: &str) -> Result<Vec<PartitionInfo>, String> {
 /// * [`PartitionInfo`] structure
 /// * [`SmartInfo`] structure
 fn collect_disk_data() -> Result<Vec<DiskInfo>, String> {
+    let disks = sysinfo::Disks::new_with_refreshed_list();
+    for disk in disks.list() {
+        println!("------> {}", disk.name().to_string_lossy());
+        println!("Read: {}", disk.usage().total_read_bytes / 1_000_000);
+        println!("Write: {}", disk.usage().total_written_bytes / 1_000_000);
+        println!("Avail: {}", disk.available_space() / 1_000_000);
+        println!("Space: {}", disk.total_space() / 1_000_000);
+        println!("Kind: {}", disk.kind());
+        println!("Mount: {}", disk.mount_point().to_string_lossy());
+        println!("Filesystem: {}", disk.file_system().to_string_lossy());
+    }
+
     let content: String =
         read_file_content(PARTITIONS).ok_or_else(|| "Unable to read partition file".to_string())?;
 
