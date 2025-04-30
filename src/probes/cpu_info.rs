@@ -96,9 +96,8 @@ fn get_cpu_usage(cpus: &[Cpu]) -> Result<Vec<(String, f32)>, Box<dyn Error>> {
     }
 }
 
-/// Retrieves CPU temperature information from the system.
-/// This function scans the thermal zones in the system (typically located in `/sys/class/thermal`)
-/// and attempts to read and display the temperature for each zone that starts with "thermal_zone".
+/// Retrieves CPU temperature information from the system,
+/// and attempts to read and store the temperature for each zone that starts with "thermal_zone".
 ///
 /// # Return
 ///
