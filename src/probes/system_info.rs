@@ -109,27 +109,40 @@ impl SystemInfo {
 fn collect_process_data(pid: usize, system: &System) -> Result<ProcessInfo, Box<dyn Error>> {
     let process = system
         .process(Pid::from(pid))
-        .ok_or_else(|| format!("Data 'Process with PID {pid} not found'"))?;
+        .ok_or_else(|| format!("Data 'Process with PID ({pid}) not found'"))?;
 
     // Precise value of CPU usage by a process required to divide it by number of CPU cores
     let cpu_count = system.cpus().len() as f32;
     let cpu_usage = if cpu_count > 0.0 {
-        process.cpu_usage() / cpu_count
+        Some(process.cpu_usage() / cpu_count)
     } else {
         error!("[{HEADER}] Data 'Failed to calculate the process cpu usage'");
-        process.cpu_usage()
+        Some(process.cpu_usage())
     };
+
+    // Disk usage by a process
+    let disk_usage_read = Some(process.disk_usage().total_read_bytes / 1_000_000);
+    let disk_usage_write = Some(process.disk_usage().total_written_bytes / 1_000_000);
+
+    // Memories usage by a process
+    let memory_usage = Some(process.memory() / 1_000_000);
+    let memory_virtual_usage = Some(process.virtual_memory() / 1_000_000);
+
+    // System info about process
+    let name = Some(process.name().to_string_lossy().to_string());
+    let status = Some(process.status().to_string());
+    let session = process.session_id().map(|pid| pid.into());
 
     Ok(ProcessInfo {
         pid,
-        name: Some(process.name().to_string_lossy().to_string()),
-        cpu_usage: Some(cpu_usage),
-        disk_usage_read: Some(process.disk_usage().total_read_bytes / 1_000_000),
-        disk_usage_write: Some(process.disk_usage().total_written_bytes / 1_000_000),
-        memory_usage: Some(process.memory() / 1_000_000),
-        memory_virtual_usage: Some(process.virtual_memory() / 1_000_000),
-        status: Some(process.status().to_string()),
-        session: process.session_id().map(|pid| pid.into()),
+        cpu_usage,
+        disk_usage_read,
+        disk_usage_write,
+        memory_usage,
+        memory_virtual_usage,
+        name,
+        status,
+        session,
     })
 }
 

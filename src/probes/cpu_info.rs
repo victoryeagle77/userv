@@ -7,13 +7,14 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use std::{
     error::Error,
-    fs::read_dir,
+    fs::{read_dir, read_to_string},
+    path::Path,
     thread::sleep,
     time::{Duration, Instant},
 };
 use sysinfo::{Components, Cpu, CpuRefreshKind, RefreshKind, System};
 
-use crate::utils::{read_file_content, write_json_to_file};
+use crate::utils::write_json_to_file;
 
 const RAPL: &str = "/sys/class/powercap";
 
@@ -36,7 +37,7 @@ struct CpuInfo {
     /// CPU usage cores in percentage.
     cores_usage: Option<Vec<(String, f32)>>,
     /// CPU temperatures by zone in °C.
-    temperature: Option<Vec<(String, Option<f32>)>>,
+    temperature: Option<Vec<(String, f32)>>,
     /// CPU energy consumption by zone in uJ.
     power: Option<Vec<(String, f64)>>,
 }
@@ -89,12 +90,10 @@ fn get_cpu_usage(cpus: &[Cpu]) -> Result<Vec<(String, f32)>, Box<dyn Error>> {
         .collect::<Vec<_>>();
 
     if result.is_empty() {
-        return Err("Data 'Unable to get CPU usage information'"
-            .to_string()
-            .into());
+        Err("Data 'Unable to get CPU usage information'".into())
+    } else {
+        Ok(result)
     }
-
-    Ok(result)
 }
 
 /// Retrieves CPU temperature information from the system.
@@ -105,7 +104,7 @@ fn get_cpu_usage(cpus: &[Cpu]) -> Result<Vec<(String, f32)>, Box<dyn Error>> {
 ///
 /// - `result` : Vector where each element represents cores and its thermal state in Celsius.
 /// - An empty vector if no thermal files or data are found.
-fn get_cpu_temp() -> Result<Vec<(String, Option<f32>)>, Box<dyn Error>> {
+fn get_cpu_temperature() -> Result<Vec<(String, f32)>, Box<dyn Error>> {
     let components = Components::new_with_refreshed_list();
 
     let result = components
@@ -116,7 +115,7 @@ fn get_cpu_temp() -> Result<Vec<(String, Option<f32>)>, Box<dyn Error>> {
 
             if let Some(temp) = temperature {
                 if !temp.is_nan() {
-                    Some((name, Some(temp)))
+                    Some((name, temp))
                 } else {
                     error!("[{HEADER}] Data 'Unable to get value for thermal zone ({name})'");
                     None
@@ -129,12 +128,10 @@ fn get_cpu_temp() -> Result<Vec<(String, Option<f32>)>, Box<dyn Error>> {
         .collect::<Vec<_>>();
 
     if result.is_empty() {
-        return Err("Data 'Unable to get CPU temperature information'"
-            .to_string()
-            .into());
+        Err("Data 'Unable to get CPU temperature information'".into())
+    } else {
+        Ok(result)
     }
-
-    Ok(result)
 }
 
 /// Function reading in RAPL directory : `/sys/class/powercap/`,
@@ -145,42 +142,46 @@ fn get_cpu_temp() -> Result<Vec<(String, Option<f32>)>, Box<dyn Error>> {
 /// - `result` : Vector containing CPU zone name and its consumption.
 /// - An empty vector if no energy consumption file or data are found.
 fn get_cpu_consumption() -> Result<Vec<(String, f64)>, Box<dyn Error>> {
-    let mut result = Vec::new();
-    let start_time = Instant::now();
+    fn read_energy(path: &Path) -> Result<f64, Box<dyn Error>> {
+        let content = read_to_string(path)?;
+        let energy = content.trim().parse::<f64>()?;
+        Ok(energy)
+    }
 
-    if let Ok(entries) = read_dir(RAPL) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                if let Some(domain) = path.file_name().and_then(|name| name.to_str()) {
-                    if domain.starts_with("intel-rapl:") {
-                        if let Some(start_energy) =
-                            read_file_content(path.join("energy_uj").to_str().unwrap())
-                                .and_then(|content| content.trim().parse::<f64>().ok())
-                        {
-                            sleep(Duration::from_secs(1));
-                            if let Some(end_energy) =
-                                read_file_content(path.join("energy_uj").to_str().unwrap())
-                                    .and_then(|content| content.trim().parse::<f64>().ok())
-                            {
-                                let elapsed = start_time.elapsed().as_secs_f64();
-                                let power = (end_energy - start_energy) / (elapsed * 1_000_000.0);
-                                result.push((domain.to_string(), power));
-                            }
-                        }
-                    }
+    let mut result = Vec::new();
+
+    for entry in read_dir(RAPL)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_dir() {
+            if let Some(domain) = path.file_name().and_then(|n| n.to_str()) {
+                if domain.starts_with("intel-rapl:") {
+                    let energy_path = path.join("energy_uj");
+
+                    // Initial energy
+                    let start_energy = read_energy(&energy_path)?;
+
+                    // Start measure between two reading values
+                    let start_time = Instant::now();
+                    sleep(Duration::from_secs(1));
+                    let end_energy = read_energy(&energy_path)?;
+                    let elapsed = start_time.elapsed().as_secs_f64();
+
+                    // Compute power consumed in Watts with energy in microJoules
+                    let power = (end_energy - start_energy) / (elapsed * 1e6);
+
+                    result.push((domain.to_string(), power));
                 }
             }
         }
     }
 
     if result.is_empty() {
-        return Err("Data 'Unable to get CPU power consumption information'"
-            .to_string()
-            .into());
+        Err("Data 'Unable to get CPU power consumption information'".into())
+    } else {
+        Ok(result)
     }
-
-    Ok(result)
 }
 
 /// Public function reading and using `/proc/cpuinfo` file values,
@@ -212,7 +213,7 @@ fn collect_cpu_data() -> Result<CpuInfo, Box<dyn Error>> {
 
     let cores_usage = Some(get_cpu_usage(cpus)?);
     let power = Some(get_cpu_consumption()?);
-    let temperature = Some(get_cpu_temp()?);
+    let temperature = Some(get_cpu_temperature()?);
 
     Ok(CpuInfo {
         cores_physic,

@@ -13,7 +13,7 @@ use sysinfo::Networks;
 use crate::utils::write_json_to_file;
 
 const FACTOR: f64 = 1e6;
-const HEADER: &str = "NET_DATA";
+const HEADER: &str = "NETWORK";
 const LOGGER: &str = "log/net_data.json";
 
 /// Collection of network data consumption.

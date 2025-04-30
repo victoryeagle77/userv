@@ -312,7 +312,7 @@ pub fn get_disk_info() {
                     HEADER: values.iter().map(|disk| disk.to_json()).collect::<Vec<_>>()
                 })
             })
-            .map_err(|e: String| e.into())
+            .map_err(|e| e.into())
     };
 
     write_json_to_file(data, LOGGER);
