@@ -250,11 +250,9 @@ fn collect_gpu_data() -> Result<Vec<Value>, Box<dyn Error>> {
 
 /// Public function used to send JSON formatted values,
 /// from [`collect_gpu_data`] function result.
-pub fn get_gpu_info() {
-    let data = || -> Result<Value, Box<dyn Error>> {
-        let values = collect_gpu_data()?;
-        Ok(json!(values))
-    };
-
-    write_json_to_file(data, LOGGER);
+pub fn get_gpu_info() -> Result<(), Box<dyn Error>> {
+    let data = collect_gpu_data()?;
+    let values = json!({ HEADER: data });
+    write_json_to_file(|| Ok(values), LOGGER)?;
+    Ok(())
 }
