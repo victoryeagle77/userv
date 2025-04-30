@@ -26,6 +26,11 @@ fn get_cpu_info_wrapper() {
         error!("[CPU] {e}");
     }
 }
+fn get_gpu_info_wrapper() {
+    if let Err(e) = gpu_info::get_gpu_info() {
+        error!("[GPU] {e}");
+    }
+}
 fn get_motherboard_info_wrapper() {
     if let Err(e) = motherboard_info::get_motherboard_info() {
         error!("[MOTHERBOARD] {e}");
@@ -58,7 +63,7 @@ fn main() {
     let map: Vec<(&str, fn())> = vec![
         ("cpu", get_cpu_info_wrapper),
         ("disk", disk_info::get_disk_info),
-        ("gpu", gpu_info::get_gpu_info),
+        ("gpu", get_gpu_info_wrapper),
         ("motherboard", get_motherboard_info_wrapper),
         ("net", get_net_info_wrapper),
         ("ram", get_ram_info_wrapper),
