@@ -1,99 +1,139 @@
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use log::error;
-use std::thread;
+use probes::{
+    cpu_info::get_cpu_info, disk_info::get_disk_info, gpu_info::get_gpu_info,
+    motherboard_info::get_motherboard_info, net_info::get_net_info, ram_info::get_ram_info,
+    system_info::get_system_info,
+};
+use std::{process::exit, thread};
+use utils::init_logger;
 
 mod probes;
 mod utils;
 
-use crate::probes::{
-    cpu_info, disk_info, gpu_info, motherboard_info, net_info, ram_info, system_info,
-};
+const HEADER: &str = "MAIN";
 
-/// Configuration structure for CLI arguments
+/// Enumeration of available arguments corresponding to a component
+#[derive(Debug, Clone, ValueEnum)]
+enum Component {
+    /// CPU probe data.
+    Cpu,
+    /// Storage device probe data.
+    Disk,
+    /// GPU device probe data.
+    Gpu,
+    /// Motherboard or principal system board probe data.
+    Board,
+    /// Network probe data.
+    Net,
+    /// Computing and SWAP memory probe data.
+    Ram,
+    /// Operating system probe data.
+    System,
+}
+
+/// Data defining arguments to active or not a probe to retrieve component data.
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-struct Cli {
-    /// Active specified components.
-    #[arg(long, value_name = "COMPONENT")]
-    active: Vec<String>,
-    /// Active all components.
+struct Arg {
+    /// List of [`Component`] to active.
+    #[arg(long, value_enum, value_delimiter = ',')]
+    active: Vec<Component>,
+    /// Activation state of a probe.
     #[arg(long)]
     all: bool,
 }
 
-fn get_cpu_info_wrapper() {
-    if let Err(e) = cpu_info::get_cpu_info() {
-        error!("[CPU] {e}");
-    }
+/// Parameters of probe that analyzing and retrieves data about a component.
+struct Probe {
+    /// Identification header for information loggers about a probe.
+    label: &'static str,
+    /// Function concerning data retrieves by a probe.
+    func: fn() -> Result<(), Box<dyn std::error::Error>>,
 }
-fn get_disk_info_wrapper() {
-    if let Err(e) = disk_info::get_disk_info() {
-        error!("[STORAGE] {e}");
+
+impl Probe {
+    fn get_probe(component: &Component) -> Probe {
+        match component {
+            Component::Cpu => Probe {
+                label: "CPU",
+                func: get_cpu_info,
+            },
+            Component::Disk => Probe {
+                label: "STORAGE",
+                func: get_disk_info,
+            },
+            Component::Gpu => Probe {
+                label: "GPU",
+                func: get_gpu_info,
+            },
+            Component::Board => Probe {
+                label: "MOTHERBOARD",
+                func: get_motherboard_info,
+            },
+            Component::Net => Probe {
+                label: "NETWORK",
+                func: get_net_info,
+            },
+            Component::Ram => Probe {
+                label: "RAM",
+                func: get_ram_info,
+            },
+            Component::System => Probe {
+                label: "SYSTEM",
+                func: get_system_info,
+            },
+        }
     }
-}
-fn get_gpu_info_wrapper() {
-    if let Err(e) = gpu_info::get_gpu_info() {
-        error!("[GPU] {e}");
-    }
-}
-fn get_motherboard_info_wrapper() {
-    if let Err(e) = motherboard_info::get_motherboard_info() {
-        error!("[MOTHERBOARD] {e}");
-    }
-}
-fn get_net_info_wrapper() {
-    if let Err(e) = net_info::get_net_info() {
-        error!("[NETWORK] {e}");
-    }
-}
-fn get_ram_info_wrapper() {
-    if let Err(e) = ram_info::get_ram_info() {
-        error!("[RAM] {e}");
-    }
-}
-fn get_system_info_wrapper() {
-    if let Err(e) = system_info::get_system_info() {
-        error!("[SYSTEM] {e}");
+
+    fn run_probe(probe: Probe) {
+        if let Err(e) = (probe.func)() {
+            error!("[{}] {}", probe.label, e);
+        }
     }
 }
 
+/// Main function of `userv` program that run in threading tasks each probes
+/// to retrieve all data concerning them.
 fn main() {
-    if let Err(e) = utils::init_logger() {
-        eprintln!("[LOGGER] INIT 'Failed to initialized error logger' : {e}");
+    if let Err(e) = init_logger() {
+        eprintln!("[LOGGER] INIT 'Failed to initialize error logger' : {e}");
         return;
     }
 
-    let mut handles: Vec<thread::JoinHandle<()>> = vec![];
-    let cli = Cli::parse();
-    let map: Vec<(&str, fn())> = vec![
-        ("cpu", get_cpu_info_wrapper),
-        ("disk", get_disk_info_wrapper),
-        ("gpu", get_gpu_info_wrapper),
-        ("board", get_motherboard_info_wrapper),
-        ("net", get_net_info_wrapper),
-        ("ram", get_ram_info_wrapper),
-        ("system", get_system_info_wrapper),
-    ];
+    let arg = Arg::parse();
+    if !arg.all && arg.active.is_empty() {
+        eprintln!(
+            "[MAIN] Arguments : No probe specified !\n\
+            --all : Active all probes\n\
+            --active <probe>"
+        );
+        exit(1);
+    }
 
-    if cli.all {
-        for (_, probe) in map {
-            handles.push(thread::spawn(probe));
-        }
+    let components = if arg.all {
+        vec![
+            Component::Cpu,
+            Component::Disk,
+            Component::Gpu,
+            Component::Board,
+            Component::Net,
+            Component::Ram,
+            Component::System,
+        ]
     } else {
-        for component in &cli.active {
-            if let Some(&(_, probe)) = map.iter().find(|(name, _)| name == component) {
-                handles.push(thread::spawn(probe));
-            } else {
-                println!("[MAIN] Arguments 'Unknown component' : {component}");
-                println!(" >> Available arguments : (cpu, disk, gpu, system, board, net, ram)");
-            }
-        }
+        arg.active
+    };
+
+    let mut handles = Vec::new();
+    for component in components {
+        let probe = Probe::get_probe(&component);
+        handles.push(thread::spawn(move || Probe::run_probe(probe)));
     }
 
     for handle in handles {
         match handle.join() {
             Ok(_) => println!("Finished task with success"),
-            Err(e) => error!("[MAIN] Process 'Failure in the thread' : {e:?}"),
+            Err(e) => error!("[{HEADER}] Process 'Failure in the thread' : {e:?}"),
         }
     }
 }
