@@ -23,7 +23,17 @@ struct Cli {
 
 fn get_cpu_info_wrapper() {
     if let Err(e) = cpu_info::get_cpu_info() {
-        error!("[MOTHERBOARD] {e}");
+        error!("[CPU] {e}");
+    }
+}
+fn get_disk_info_wrapper() {
+    if let Err(e) = disk_info::get_disk_info() {
+        error!("[STORAGE] {e}");
+    }
+}
+fn get_gpu_info_wrapper() {
+    if let Err(e) = gpu_info::get_gpu_info() {
+        error!("[GPU] {e}");
     }
 }
 fn get_motherboard_info_wrapper() {
@@ -33,7 +43,7 @@ fn get_motherboard_info_wrapper() {
 }
 fn get_net_info_wrapper() {
     if let Err(e) = net_info::get_net_info() {
-        error!("[NET_DATA] {e}");
+        error!("[NETWORK] {e}");
     }
 }
 fn get_ram_info_wrapper() {
@@ -49,7 +59,7 @@ fn get_system_info_wrapper() {
 
 fn main() {
     if let Err(e) = utils::init_logger() {
-        println!("[LOGGER] INIT 'Failed to initialized error logger' : {e}");
+        eprintln!("[LOGGER] INIT 'Failed to initialized error logger' : {e}");
         return;
     }
 
@@ -57,9 +67,9 @@ fn main() {
     let cli = Cli::parse();
     let map: Vec<(&str, fn())> = vec![
         ("cpu", get_cpu_info_wrapper),
-        ("disk", disk_info::get_disk_info),
-        ("gpu", gpu_info::get_gpu_info),
-        ("motherboard", get_motherboard_info_wrapper),
+        ("disk", get_disk_info_wrapper),
+        ("gpu", get_gpu_info_wrapper),
+        ("board", get_motherboard_info_wrapper),
         ("net", get_net_info_wrapper),
         ("ram", get_ram_info_wrapper),
         ("system", get_system_info_wrapper),
@@ -75,9 +85,7 @@ fn main() {
                 handles.push(thread::spawn(probe));
             } else {
                 println!("[MAIN] Arguments 'Unknown component' : {component}");
-                println!(
-                    " >> Available arguments : (cpu, disk, gpu, system, motherboard, net, ram)"
-                );
+                println!(" >> Available arguments : (cpu, disk, gpu, system, board, net, ram)");
             }
         }
     }

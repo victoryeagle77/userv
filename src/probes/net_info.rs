@@ -13,7 +13,7 @@ use sysinfo::Networks;
 use crate::utils::write_json_to_file;
 
 const FACTOR: f64 = 1e6;
-const HEADER: &str = "NET_DATA";
+const HEADER: &str = "NETWORK";
 const LOGGER: &str = "log/net_data.json";
 
 /// Collection of network data consumption.
@@ -87,9 +87,7 @@ fn collect_interface_data() -> Result<Vec<NetworkInterface>, Box<dyn Error>> {
     }
 
     if interfaces.is_empty() {
-        Err("Data 'No valid network interfaces found'"
-            .to_string()
-            .into())
+        Err("Data 'No valid network interfaces found'".into())
     } else {
         Ok(interfaces)
     }

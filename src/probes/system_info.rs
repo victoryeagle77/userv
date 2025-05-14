@@ -5,10 +5,12 @@
 use log::error;
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::{cmp::Ordering::Equal, error::Error};
+use std::{error::Error, thread};
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
 use crate::utils::write_json_to_file;
+
+const FACTOR: u64 = 1_000_000;
 
 const HEADER: &str = "SYSTEM";
 const LOGGER: &str = "log/system_data.json";
@@ -34,6 +36,8 @@ struct ProcessInfo {
     status: Option<String>,
     /// Session ID of a running process.
     session: Option<usize>,
+    /// Time the process has been running in minutes.
+    run_time: Option<u64>,
 }
 
 /// Collection of system load data.
@@ -51,8 +55,8 @@ struct SystemInfo {
     uptime: Option<(u64, u64, u64)>,
     /// Total number of processes.
     process_count: Option<u32>,
-    /// Process with the most important consumption.
-    process_top: Option<ProcessInfo>,
+    /// Process information.
+    processes: Option<Vec<ProcessInfo>>,
 }
 
 impl ProcessInfo {
@@ -68,6 +72,7 @@ impl ProcessInfo {
             "memory_virtual_usage_MB": self.memory_virtual_usage,
             "status": self.status,
             "session": self.session,
+            "run_time_min": self.run_time,
         })
     }
 }
@@ -90,47 +95,62 @@ impl SystemInfo {
                 "minutes": minutes
             })),
             "total_process": self.process_count,
-            "top_process": self.process_top.as_ref().map(|p| p.to_json()),
+            "processes": self.processes.as_ref().map(|ps| ps.iter().map(|p| p.to_json()).collect::<Vec<_>>()),
         })
     }
-}
 
-/// Retrieves information about a process.
-///
-/// # Arguments
-///
-/// - `pid` : Process identification.
-/// - `system` : Generic initializer.
-///
-/// # Returns
-///
-/// - Completed [`ProcessInfo`] structure with all information about a process.
-/// - An error occurs when the PID of a process is not found.
-fn collect_process_data(pid: usize, system: &System) -> Result<ProcessInfo, Box<dyn Error>> {
-    let process = system
-        .process(Pid::from(pid))
-        .ok_or_else(|| format!("Data 'Process with PID {pid} not found'"))?;
+    /// Retrieves information about a process.
+    ///
+    /// # Arguments
+    ///
+    /// - `pid` : Process identification.
+    /// - `system` : Generic initializer.
+    ///
+    /// # Returns
+    ///
+    /// - Completed [`ProcessInfo`] structure with all information about a process.
+    /// - An error occurs when the PID of a process is not found.
+    fn collect_process_data(pid: usize, system: &System) -> Result<ProcessInfo, Box<dyn Error>> {
+        let process = system
+            .process(Pid::from(pid))
+            .ok_or_else(|| format!("Data 'Process with PID ({pid}) not found'"))?;
 
-    // Precise value of CPU usage by a process required to divide it by number of CPU cores
-    let cpu_count = system.cpus().len() as f32;
-    let cpu_usage = if cpu_count > 0.0 {
-        process.cpu_usage() / cpu_count
-    } else {
-        error!("[{HEADER}] Data 'Failed to calculate the process cpu usage'");
-        process.cpu_usage()
-    };
+        // Precise value of CPU usage by a process required to divide it by number of CPU cores
+        let cpu_count = system.cpus().len() as f32;
+        let cpu_usage = if cpu_count > 0.0 {
+            Some(process.cpu_usage() / cpu_count)
+        } else {
+            error!("[{HEADER}] Data 'Failed to calculate the process cpu usage'");
+            Some(process.cpu_usage())
+        };
 
-    Ok(ProcessInfo {
-        pid,
-        name: Some(process.name().to_string_lossy().to_string()),
-        cpu_usage: Some(cpu_usage),
-        disk_usage_read: Some(process.disk_usage().total_read_bytes / 1_000_000),
-        disk_usage_write: Some(process.disk_usage().total_written_bytes / 1_000_000),
-        memory_usage: Some(process.memory() / 1_000_000),
-        memory_virtual_usage: Some(process.virtual_memory() / 1_000_000),
-        status: Some(process.status().to_string()),
-        session: process.session_id().map(|pid| pid.into()),
-    })
+        // Disk usage by a process
+        let disk_usage_read = Some(process.disk_usage().total_read_bytes / FACTOR);
+        let disk_usage_write = Some(process.disk_usage().total_written_bytes / FACTOR);
+
+        // Memories usage by a process
+        let memory_usage = Some(process.memory() / FACTOR);
+        let memory_virtual_usage = Some(process.virtual_memory() / FACTOR);
+
+        // System info about process
+        let name = Some(process.name().to_string_lossy().to_string());
+        let session = process.session_id().map(|pid| pid.into());
+        let status = Some(process.status().to_string());
+        let run_time = Some(process.run_time() / 60);
+
+        Ok(ProcessInfo {
+            pid,
+            cpu_usage,
+            disk_usage_read,
+            disk_usage_write,
+            memory_usage,
+            memory_virtual_usage,
+            name,
+            session,
+            status,
+            run_time,
+        })
+    }
 }
 
 /// Retrieves information about the top resource-consuming process, system load and uptime.
@@ -182,7 +202,7 @@ fn collect_system_data() -> Result<SystemInfo, Box<dyn Error>> {
 
     let mut sys = System::new_all();
     // Wait a bit because CPU usage is based on diff
-    std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
+    thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
     // Refresh CPU usage to get actual value
     sys.refresh_processes_specifics(
         ProcessesToUpdate::All,
@@ -198,15 +218,16 @@ fn collect_system_data() -> Result<SystemInfo, Box<dyn Error>> {
         return Err("Data 'No processes found'".into());
     };
 
-    // Information about the most-consuming process
-    let top = sys
+    // Information about consuming processes
+    let processes: Vec<ProcessInfo> = sys
         .processes()
         .iter()
-        .max_by(|(_, a), (_, b)| a.cpu_usage().partial_cmp(&b.cpu_usage()).unwrap_or(Equal));
-    let process_top = if let Some((&pid, _process)) = top {
-        collect_process_data(pid.into(), &sys)?
+        .filter_map(|(&pid, _process)| SystemInfo::collect_process_data(pid.into(), &sys).ok())
+        .collect();
+    let processes = if !processes.is_empty() {
+        Some(processes)
     } else {
-        return Err("Data 'Failed to find the top resource-consuming process'".into());
+        return Err("Data 'No processes found'".into());
     };
 
     Ok(SystemInfo {
@@ -216,7 +237,7 @@ fn collect_system_data() -> Result<SystemInfo, Box<dyn Error>> {
         system_version,
         uptime,
         process_count,
-        process_top: Some(process_top),
+        processes,
     })
 }
 

@@ -107,10 +107,10 @@ fn read_dmi_data() -> HashMap<String, String> {
 /// - Completed [`MotherboardInfo`] structure with all board and BIOS information.
 /// - An error when no information about BIOS or Motherboard found.
 fn collect_motherboard_data() -> Result<MotherboardInfo, Box<dyn Error>> {
-    let dmi_info = read_dmi_data();
+    let dmi = read_dmi_data();
     let mut data = MotherboardInfo::default();
 
-    for (key, value) in dmi_info.iter() {
+    for (key, value) in dmi.iter() {
         match key.as_str() {
             "board_name" => data.board_name = Some(value.clone()),
             "board_serial" => data.board_serial = Some(value.clone()),
@@ -122,10 +122,6 @@ fn collect_motherboard_data() -> Result<MotherboardInfo, Box<dyn Error>> {
             "bios_version" => data.bios_version = Some(value.clone()),
             _ => error!("[{HEADER}] Data 'Unknown DMI key' : {key}"),
         }
-    }
-
-    if data.is_empty() {
-        return Err("Data 'No information about BIOS or Motherboard found'".into());
     }
 
     if data.board_name.is_none() {
@@ -146,7 +142,11 @@ fn collect_motherboard_data() -> Result<MotherboardInfo, Box<dyn Error>> {
         error!("[{HEADER}] Data 'Failed to retrieve BIOS version'");
     }
 
-    Ok(data)
+    if data.is_empty() {
+        Err("Data 'No information about BIOS or Motherboard found'".into())
+    } else {
+        Ok(data)
+    }
 }
 
 /// Public function used to send JSON formatted values,
