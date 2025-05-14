@@ -58,16 +58,14 @@ impl SmartInfo {
     ///
     /// - [`SmartInfo`] filled structure with disk information.
     /// - Error message if CString can not be created, file descriptor content or final extracted data are null.
-    fn collect_smart_data(path: &str) -> Result<SmartInfo, String> {
+    fn collect_smart_data(path: &str) -> Result<SmartInfo, Box<dyn Error>> {
         let device =
-            CString::new(path).map_err(|_| "INIT 'Failed to create CString'".to_string())?;
+            CString::new(path).map_err(|e| format!("INIT 'Failed to create CString' : {e}"))?;
         let fd = unsafe { open(device.as_ptr(), 0) };
 
         if fd < 0 {
             error!("[{HEADER}] Data 'Failed to open device for smart information'");
-            return Err(
-                "[{HEADER}] Data 'Failed to open device for smart information'".to_string(),
-            );
+            return Err("Data 'Failed to open device for smart information'".into());
         }
 
         let mut buffer = [0u8; 512];
@@ -76,9 +74,7 @@ impl SmartInfo {
         if bytes < 0 {
             unsafe { close(fd) };
             error!("[{HEADER}] Data 'Failed to retrieve disk smart information'");
-            return Err(
-                "[{HEADER}] Data 'Failed to open device for smart information'".to_string(),
-            );
+            return Err("Data 'Failed to retrieve disk smart information'".into());
         }
 
         let sectors_reallocated = buffer.get(5).copied();
@@ -103,21 +99,21 @@ impl SmartInfo {
 #[derive(Debug, Serialize)]
 struct DiskInfo {
     /// Disk reading data transfer in MB.
-    bandwidth_read: u64,
+    bandwidth_read: Option<u64>,
     /// Disk writing data transfer in MB.
-    bandwidth_write: u64,
+    bandwidth_write: Option<u64>,
     /// Path on the system where the disk device is mounted.
-    file_mount: String,
+    file_mount: Option<String>,
     /// Disk file system type (ext, NTF, FAT...).
-    file_system: String,
+    file_system: Option<String>,
     /// Disk device type (HDD, SDD).
-    kind: String,
+    kind: Option<String>,
     /// Disk path name on the system.
     name: String,
     /// Disk used memory space.
-    space_available: u64,
+    space_available: Option<u64>,
     /// Disk total memory space.
-    space_total: u64,
+    space_total: Option<u64>,
     /// Retrieves more detailed information with [`SmartInfo`].
     smart_info: Option<SmartInfo>,
 }
@@ -176,23 +172,23 @@ impl DiskInfo {
     }
 
     /// Detect a specific device storage on the system, and retrieves its associated information.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// - `disk` : Device on which we want retrieves data.
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// Completed [`DiskInfo`] structure concerning data about the chosen device.
     fn from_device(disk: &Disk) -> Result<DiskInfo, Box<dyn Error>> {
-        let bandwidth_read = disk.usage().total_read_bytes / 1_000_000;
-        let bandwidth_write = disk.usage().total_written_bytes / 1_000_000;
-        let file_system = disk.file_system().to_string_lossy().to_string();
-        let file_mount = disk.mount_point().to_string_lossy().to_string();
-        let kind = disk.kind().to_string();
+        let bandwidth_read = Some(disk.usage().total_read_bytes / 1_000_000);
+        let bandwidth_write = Some(disk.usage().total_written_bytes / 1_000_000);
+        let file_system = Some(disk.file_system().to_string_lossy().to_string());
+        let file_mount = Some(disk.mount_point().to_string_lossy().to_string());
+        let kind = Some(disk.kind().to_string());
         let name = disk.name().to_string_lossy().to_string();
-        let space_available = disk.available_space() / 1_000_000_000;
-        let space_total = disk.total_space() / 1_000_000_000;
+        let space_available = Some(disk.available_space() / 1_000_000_000);
+        let space_total = Some(disk.total_space() / 1_000_000_000);
 
         let smart_info = SmartInfo::collect_smart_data(&Self::device_path(&name)).ok();
 
