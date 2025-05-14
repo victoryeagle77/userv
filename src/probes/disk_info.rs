@@ -99,16 +99,26 @@ impl SmartInfo {
     }
 }
 
+/// Collected global disk data.
 #[derive(Debug, Serialize)]
 struct DiskInfo {
+    /// Disk reading data transfer in MB.
     bandwidth_read: u64,
+    /// Disk writing data transfer in MB.
     bandwidth_write: u64,
+    /// Path on the system where the disk device is mounted.
     file_mount: String,
+    /// Disk file system type (ext, NTF, FAT...).
     file_system: String,
+    /// Disk device type (HDD, SDD).
     kind: String,
+    /// Disk path name on the system.
     name: String,
+    /// Disk used memory space.
     space_available: u64,
+    /// Disk total memory space.
     space_total: u64,
+    /// Retrieves more detailed information with [`SmartInfo`].
     smart_info: Option<SmartInfo>,
 }
 
@@ -165,6 +175,15 @@ impl DiskInfo {
         name.to_string()
     }
 
+    /// Detect a specific device storage on the system, and retrieves its associated information.
+    /// 
+    /// # Arguments
+    /// 
+    /// - `disk` : Device on which we want retrieves data.
+    /// 
+    /// # Returns
+    /// 
+    /// Completed [`DiskInfo`] structure concerning data about the chosen device.
     fn from_device(disk: &Disk) -> Result<DiskInfo, Box<dyn Error>> {
         let bandwidth_read = disk.usage().total_read_bytes / 1_000_000;
         let bandwidth_write = disk.usage().total_written_bytes / 1_000_000;
