@@ -97,9 +97,9 @@ impl Probe {
 
     /// Run a probe to retrieve information about a component.
     /// If component's data can't be retrieved, we log the error returned.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// - `probe` : Concerning component with [`Probe`].
     fn run_probe(probe: Probe) {
         if let Err(e) = (probe.func)() {
