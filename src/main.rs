@@ -1,8 +1,8 @@
 use clap::{Parser, ValueEnum};
 use log::error;
 use probes::{
-    cpu_info::get_cpu_info, disk_info::get_disk_info, gpu_info::get_gpu_info,
-    motherboard_info::get_motherboard_info, net_info::get_net_info, ram_info::get_ram_info,
+    board_info::get_board_info, cpu_info::get_cpu_info, disk_info::get_disk_info,
+    gpu_info::get_gpu_info, net_info::get_net_info, ram_info::get_ram_info,
     system_info::get_system_info,
 };
 use std::{process::exit, thread};
@@ -52,6 +52,16 @@ struct Probe {
 }
 
 impl Probe {
+    /// Define the probe and the label associated to a component,
+    /// and check if it is selected.
+    ///
+    /// # Arguments
+    ///
+    /// - `component` : The component that we want retrieves data.
+    ///
+    /// # Returns
+    ///
+    /// The selected component via [`Probe`] information.
     fn get_probe(component: &Component) -> Probe {
         match component {
             Component::Cpu => Probe {
@@ -68,7 +78,7 @@ impl Probe {
             },
             Component::Board => Probe {
                 label: "MOTHERBOARD",
-                func: get_motherboard_info,
+                func: get_board_info,
             },
             Component::Net => Probe {
                 label: "NETWORK",
@@ -85,25 +95,31 @@ impl Probe {
         }
     }
 
+    /// Run a probe to retrieve information about a component.
+    /// If component's data can't be retrieved, we log the error returned.
+    /// 
+    /// # Arguments
+    /// 
+    /// - `probe` : Concerning component with [`Probe`].
     fn run_probe(probe: Probe) {
         if let Err(e) = (probe.func)() {
-            error!("[{}] {}", probe.label, e);
+            error!("[{}] {e}", probe.label);
         }
     }
 }
 
 /// Main function of `userv` program that run in threading tasks each probes
-/// to retrieve all data concerning them.
+/// to retrieve all data concerning component of a machine.
 fn main() {
     if let Err(e) = init_logger() {
-        eprintln!("[LOGGER] INIT 'Failed to initialize error logger' : {e}");
+        eprintln!("[{HEADER}] INIT 'Failed to initialize error logger' : {e}");
         return;
     }
 
     let arg = Arg::parse();
     if !arg.all && arg.active.is_empty() {
         eprintln!(
-            "[MAIN] Arguments : No probe specified !\n\
+            "[{HEADER}] Arguments : No probe specified !\n\
             --all : Active all probes\n\
             --active <probe>"
         );

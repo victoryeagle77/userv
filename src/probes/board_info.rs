@@ -9,10 +9,10 @@ use std::{collections::HashMap, error::Error, fs::read_to_string};
 
 use crate::utils::write_json_to_file;
 
-const HEADER: &str = "MOTHERBOARD";
-const LOGGER: &str = "log/motherboard_data.json";
+const HEADER: &str = "BOARD";
+const LOGGER: &str = "log/board_data.json";
 
-const MOTHERBOARD_FILES: [&str; 8] = [
+const BOARD_FILES: [&str; 8] = [
     "/sys/class/dmi/id/board_name",
     "/sys/class/dmi/id/board_serial",
     "/sys/class/dmi/id/board_version",
@@ -25,7 +25,7 @@ const MOTHERBOARD_FILES: [&str; 8] = [
 
 /// Collection of collected motherboard data.
 #[derive(Debug, Serialize)]
-struct MotherboardInfo {
+struct BoardInfo {
     board_name: Option<String>,
     board_serial: Option<String>,
     board_version: Option<String>,
@@ -36,8 +36,8 @@ struct MotherboardInfo {
     bios_vendor: Option<String>,
 }
 
-impl MotherboardInfo {
-    /// Converts [`MotherboardInfo`] into a JSON object.
+impl BoardInfo {
+    /// Converts [`BoardInfo`] into a JSON object.
     fn to_json(&self) -> Value {
         json!({
             "motherboard_name": self.board_name,
@@ -51,7 +51,7 @@ impl MotherboardInfo {
         })
     }
 
-    /// Check if we have no information available to store in [`MotherboardInfo`].
+    /// Check if we have no information available to store in [`BoardInfo`].
     fn is_empty(&self) -> bool {
         self.board_name.is_none()
             && self.board_serial.is_none()
@@ -63,9 +63,9 @@ impl MotherboardInfo {
             && self.bios_version.is_none()
     }
 
-    /// Filling all field of [`MotherboardInfo`] with null value by default.
+    /// Filling all field of [`BoardInfo`] with null value by default.
     fn default() -> Self {
-        MotherboardInfo {
+        BoardInfo {
             board_name: None,
             board_serial: None,
             board_version: None,
@@ -86,7 +86,7 @@ impl MotherboardInfo {
 /// - `data`: Each element found for motherboard info.
 fn read_dmi_data() -> HashMap<String, String> {
     let mut data = HashMap::new();
-    for &path in MOTHERBOARD_FILES.iter() {
+    for &path in BOARD_FILES.iter() {
         match read_to_string(path) {
             Ok(content) => {
                 let key = path.rsplit('/').next().unwrap_or_default();
@@ -104,11 +104,11 @@ fn read_dmi_data() -> HashMap<String, String> {
 ///
 /// # Returns
 ///
-/// - Completed [`MotherboardInfo`] structure with all board and BIOS information.
+/// - Completed [`BoardInfo`] structure with all board and BIOS information.
 /// - An error when no information about BIOS or Motherboard found.
-fn collect_motherboard_data() -> Result<MotherboardInfo, Box<dyn Error>> {
+fn collect_board_data() -> Result<BoardInfo, Box<dyn Error>> {
     let dmi = read_dmi_data();
-    let mut data = MotherboardInfo::default();
+    let mut data = BoardInfo::default();
 
     for (key, value) in dmi.iter() {
         match key.as_str() {
@@ -151,8 +151,8 @@ fn collect_motherboard_data() -> Result<MotherboardInfo, Box<dyn Error>> {
 
 /// Public function used to send JSON formatted values,
 /// from [`collect_motherboard_data`] function result.
-pub fn get_motherboard_info() -> Result<(), Box<dyn Error>> {
-    let data = collect_motherboard_data()?;
+pub fn get_board_info() -> Result<(), Box<dyn Error>> {
+    let data = collect_board_data()?;
     let values = json!({ HEADER: data.to_json() });
     write_json_to_file(|| Ok(values), LOGGER)?;
     Ok(())
