@@ -5,7 +5,7 @@ codegen-units = 1
 
 [package]
 name = "userv"
-version = "0.1.5"
+version = "0.1"
 edition = "2021"
 description = "Program design to retrieve and compute machine information"
 

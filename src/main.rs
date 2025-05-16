@@ -16,18 +16,18 @@ const HEADER: &str = "MAIN";
 /// Enumeration of available arguments corresponding to a component
 #[derive(Debug, Clone, ValueEnum)]
 enum Component {
-    /// CPU probe data.
-    Cpu,
-    /// Storage device probe data.
-    Disk,
-    /// GPU device probe data.
-    Gpu,
     /// Motherboard or principal system board probe data.
     Board,
+    /// CPU probe data.
+    Cpu,
+    /// GPU device probe data.
+    Gpu,
     /// Network probe data.
     Net,
     /// Computing and SWAP memory probe data.
     Ram,
+    /// Storage device probe data.
+    Storage,
     /// Operating system probe data.
     System,
 }
@@ -64,21 +64,17 @@ impl Probe {
     /// The selected component via [`Probe`] information.
     fn get_probe(component: &Component) -> Probe {
         match component {
+            Component::Board => Probe {
+                label: "MOTHERBOARD",
+                func: get_board_info,
+            },
             Component::Cpu => Probe {
                 label: "CPU",
                 func: get_cpu_info,
             },
-            Component::Disk => Probe {
-                label: "STORAGE",
-                func: get_disk_info,
-            },
             Component::Gpu => Probe {
                 label: "GPU",
                 func: get_gpu_info,
-            },
-            Component::Board => Probe {
-                label: "MOTHERBOARD",
-                func: get_board_info,
             },
             Component::Net => Probe {
                 label: "NETWORK",
@@ -87,6 +83,10 @@ impl Probe {
             Component::Ram => Probe {
                 label: "RAM",
                 func: get_ram_info,
+            },
+            Component::Storage => Probe {
+                label: "STORAGE",
+                func: get_disk_info,
             },
             Component::System => Probe {
                 label: "SYSTEM",
@@ -128,12 +128,12 @@ fn main() {
 
     let components = if arg.all {
         vec![
-            Component::Cpu,
-            Component::Disk,
-            Component::Gpu,
             Component::Board,
+            Component::Cpu,
+            Component::Gpu,
             Component::Net,
             Component::Ram,
+            Component::Storage,
             Component::System,
         ]
     } else {
