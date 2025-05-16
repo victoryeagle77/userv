@@ -16,9 +16,22 @@ Currently, we collect the following data :
 
 * Storage devices data
 
+  Retrieves information about device storage (disks, SD card, etc...) of an IT
+  equipment. For each device detected, we retrieve the following data :
+
+  * Bandwidth for reading bytes in MB.
+  * Bandwidth for writing bytes in MB.
+  * File system path where the device is mounted.
+  * file system format of the device (ext, NTF, FAT, etc...).
+  * kind
+  * name
+  * smart_info
+  * space available MB
+  * space total MB
+
 * RAM memory data
 
-  Retrieves in MB data above the computing and SWAP memory of an IT equipment :
+  Retrieves data about the computing and SWAP memory of an IT equipment :
 
   * Available RAM in MB.
   * Free RAM in MB.
@@ -56,7 +69,7 @@ Currently, we collect the following data :
 
 * System data
 
-## Program usage
+## Program utilization
 
 To run the program to analyze and retrieve all data about all available
 components, you can currently run its binary like this :
