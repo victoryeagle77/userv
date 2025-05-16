@@ -53,7 +53,7 @@ Currently, we collect the following data:
   * CPU clock frequency in MHz
   * CPU full model name.
   * Temperatures by identified CPU thermal zone in °C.
-  * Power consumption in W.
+  * Power consumption in W (with RAPL domain zone analyze for INTEL).
 
 * Storage devices data
 
@@ -108,6 +108,27 @@ Currently, we collect the following data:
   * Transmitted data consumption in MB.
 
 * System data
+
+  * Operating system distribution name.
+  * Operating system distribution version.
+  * Operating system kernel info.
+  * Operating system load given for 1, 5 and 15 minutes.
+  * Total number of processes enabled on the system.
+  * Uptime given in days, hours, and minutes.
+
+  List the running processes on CPU, and retrieves for each of them
+  their associated data:
+
+  * CPU usage consumed by a process in %.
+  * Disk reading data usage by a process in MB.
+  * Disk writing data usage by a process in MB.
+  * Memory usage consumed by a process in MB.
+  * Virtual memory usage consumed by a process in MB.
+  * Process name given by the system.
+  * Process identification on the system by PID.
+  * Time the process has been running in minutes.
+  * System session used by a process.
+  * System run status used by a process.
 
 ## Program utilization
 
