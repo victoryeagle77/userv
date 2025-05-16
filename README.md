@@ -1,37 +1,67 @@
 # Userv
 
-This project involves analyzing the hardware of a computer equipment via a set
-of micro-services, and providing information on the energy consumption and
-health status of the components with the collected data.
+This project involves analyzing the hardware of a computer system through a set
+of microservices, and providing information on the energy consumption and
+health status of the components using the collected data.
 
-Version : 0.1
+Version : 0.1.5
 
 ## Collected metrics
 
-Currently, we collect the following data :
+Currently, we collect the following data:
 
 * GPU data
+
+  Check the number of GPU devices, identifying them, and retrieves for each of
+  them (currently NVIDIA GPU) their associated data:
+
+  * Gpu architecture.
+  * Gpu PCIe bus device identification.
+  * Gpu full name.
+  * Gpu clock concerning graphic in MHz.
+  * Gpu clock concerning memory in MHz.
+  * Gpu clock concerning streaming multiprocessor in MHz.
+  * Gpu clock concerning video in MHz.
+  * Gpu fans speeds in %.
+  * Gpu temperature in °C.
+  * Gpu memory free in GB.
+  * Gpu memory total in GB.
+  * Gpu memory usage in GB.
+  * Gpu memory usage in %.
+  * Gpu global usage in %.
+  * Gpu energy consumption in mJ.
+  * Gpu power consumption in mW.
+  * Gpu PCIe bus received data consumption in MB.
+  * Gpu PCIe bus sent data consumption in MB.
+
+  List the running processes on a GPU device, and retrieves for each of them
+  their associated data:
+
+  * Process identification by its attributed PID on the system.
+  * Process video decoding tasks in %.
+  * Process video encoding tasks in %.
+  * Process memory utilization in %.
+  * Process streaming multiprocessor utilization in %.
 
 * Processor data
 
 * Storage devices data
 
   Retrieves information about device storage (disks, SD card, etc...) of an IT
-  equipment. For each device detected, we retrieve the following data :
+  equipment. For each device detected, we retrieve the following data:
 
   * Bandwidth for reading bytes in MB.
   * Bandwidth for writing bytes in MB.
   * File system path where the device is mounted.
-  * file system format of the device (ext, NTF, FAT, etc...).
-  * kind
-  * name
-  * smart_info
-  * space available MB
-  * space total MB
+  * File system format of the device (ext, NTF, FAT, etc...).
+  * Device kind (HDD or SSD).
+  * Path name of the device on the system.
+  * Available memory space in MB.
+  * Total memory space in MB.
 
 * RAM memory data
 
-  Retrieves data about the computing and SWAP memory of an IT equipment :
+  Retrieves data about the computing and SWAP memory of an IT equipment:
 
   * Available RAM in MB.
   * Free RAM in MB.
@@ -46,16 +76,16 @@ Currently, we collect the following data :
 * Board data
 
   Retrieves data about the main board of the concerned IT equipment if are
-  available :
+  available:
 
-  * board name.
-  * board serial.
-  * board version.
-  * board vendor.
-  * bios date.
-  * bios release.
-  * bios version.
-  * bios vendor.
+  * Board name.
+  * Board serial.
+  * Board version.
+  * Board vendor.
+  * Bios date.
+  * Bios release.
+  * Bios version.
+  * Bios vendor.
 
 * Network data
 
@@ -71,22 +101,22 @@ Currently, we collect the following data :
 
 ## Program utilization
 
-To run the program to analyze and retrieve all data about all available
-components, you can currently run its binary like this :
+To run the program to analyze and retrieve all data on all available components,
+you can run its binary as follows:
 
 ```bash
 ./userv --all
 ```
 
-To run the program precisely for only retrieves desired components information,
-you can specifying a probe in binary arguments.
+To run the program precisely to retrieve only the information from the desired
+components, you can specify a probe in binary arguments.
 
 ```bash
 ./userv --active probe_1,probe_2,...
 ```
 
-You can select a `probe` to get data components with the program, among the following
-probes list :
+You can select a probe to obtain data with the program, from the following
+probe list:
 
 * board
 * cpu
