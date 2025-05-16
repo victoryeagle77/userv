@@ -29,8 +29,9 @@ Currently, we collect the following data:
   * Gpu memory usage in GB.
   * Gpu memory usage in %.
   * Gpu global usage in %.
-  * Gpu energy consumption in mJ.
-  * Gpu power consumption in mW.
+  * Gpu energy consumption in J.
+  * Gpu power consumption in W.
+  * Gpu limit device power consumption in W.
   * Gpu PCIe bus received data consumption in MB.
   * Gpu PCIe bus sent data consumption in MB.
 
@@ -44,6 +45,15 @@ Currently, we collect the following data:
   * Process streaming multiprocessor utilization in %.
 
 * Processor data
+
+  * CPU cores usage in %.
+  * CPU logical cores number.
+  * CPU physical cores number.
+  * CPU family foundation.
+  * CPU clock frequency in MHz
+  * CPU full model name.
+  * Temperatures by identified CPU thermal zone in °C.
+  * Power consumption in W.
 
 * Storage devices data
 

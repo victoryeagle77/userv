@@ -48,7 +48,7 @@ struct GpuMetrics {
     /// GPU video clock usage in MHz.
     gpu_clock_video: Option<u32>,
     /// GPU energy consumption in J.
-    gpu_energy_consumption: Option<u64>,
+    gpu_energy_consumption: Option<f32>,
     /// Speed per fan in percentage.
     gpu_fan_speed: Vec<Option<u32>>,
     /// GPU model name.
@@ -70,9 +70,9 @@ struct GpuMetrics {
     /// PCI received data consumption by GPU in KB/s.
     gpu_pci_data_received: Option<u32>,
     /// GPU electrical consumption in mW.
-    gpu_power_consumption: Option<u32>,
+    gpu_power_consumption: Option<f32>,
     /// GPU maximum electrical consumption accepted in mW.
-    gpu_power_limit: Option<u32>,
+    gpu_power_limit: Option<f32>,
 }
 
 /// Collection of collected running processes GPU data.
@@ -91,6 +91,31 @@ struct GpuProcessMetrics {
 }
 
 impl GpuMetrics {
+    /// Converts [`GpuMetrics`] into a JSON object.
+    fn to_json(&self) -> Value {
+        json!({
+            "gpu_architecture": self.gpu_arch.as_deref().map(Some).unwrap_or(None),
+            "gpu_bus_id": self.gpu_bus_id.as_deref().map(Some).unwrap_or(None),
+            "gpu_clock_graphic_MHz": self.gpu_clock_graphic.map(Some).unwrap_or(None),
+            "gpu_clock_memory_MHz": self.gpu_clock_memory.map(Some).unwrap_or(None),
+            "gpu_clock_sm_MHz": self.gpu_clock_sm.map(Some).unwrap_or(None),
+            "gpu_clock_video_MHz": self.gpu_clock_video.map(Some).unwrap_or(None),
+            "gpu_energy_consumption_J": self.gpu_energy_consumption.map(Some).unwrap_or(None),
+            "gpu_fan_speeds_%": self.gpu_fan_speed.iter().map(|&s| s.unwrap_or(0)).collect::<Vec<u32>>(),
+            "gpu_name": self.gpu_name.as_deref().map(Some).unwrap_or(None),
+            "gpu_usage_%": self.gpu_usage.map(Some).unwrap_or(None),
+            "gpu_temperature_°C": self.gpu_temperature.map(Some).unwrap_or(None),
+            "gpu_memory_free_GB": self.gpu_memory_free.map(Some).unwrap_or(None),
+            "gpu_memory_usage_%": self.gpu_memory_stat.map(Some).unwrap_or(None),
+            "gpu_memory_total_GB": self.gpu_memory_total.map(Some).unwrap_or(None),
+            "gpu_memory_usage_GB": self.gpu_memory_usage.map(Some).unwrap_or(None),
+            "gpu_pci_data_sent_MB": self.gpu_pci_data_sent.map(Some).unwrap_or(None),
+            "gpu_pci_data_received_MB": self.gpu_pci_data_received.map(Some).unwrap_or(None),
+            "gpu_power_consumption_W": self.gpu_power_consumption.map(Some).unwrap_or(None),
+            "gpu_power_limit_W": self.gpu_power_limit.map(Some).unwrap_or(None),
+        })
+    }
+
     /// Collect all global hardware GPU metrics for a given device.
     ///
     /// # Arguments
@@ -111,12 +136,12 @@ impl GpuMetrics {
         // Identifications
         let gpu_arch = nvml_try("Failed to get architecture type", || device.architecture())
             .ok()
-            .map(|a| a.to_string());
+            .map(|data| data.to_string());
         let gpu_bus_id = nvml_try("Failed to get GPU PCI bus identification", || {
             device.pci_info()
         })
         .ok()
-        .map(|pci| pci.bus_id.clone());
+        .map(|data| data.bus_id.clone());
         let gpu_name = nvml_try("Failed to get GPU name", || device.name()).ok();
 
         // Existing clock frequencies
@@ -142,18 +167,22 @@ impl GpuMetrics {
         let gpu_energy_consumption = nvml_try("Failed to get energy consumption", || {
             device.total_energy_consumption()
         })
-        .ok();
+        .ok()
+        .map(|data| data as f32 / 1e3);
         let gpu_power_consumption =
-            nvml_try("Failed to get power consumption", || device.power_usage()).ok();
+            nvml_try("Failed to get power consumption", || device.power_usage())
+                .ok()
+                .map(|data| data as f32 / 1e3);
         let gpu_power_limit = nvml_try("Failed to get power management limit", || {
             device.power_management_limit()
         })
-        .ok();
+        .ok()
+        .map(|data| data as f32 / 1e3);
 
         // Thermal information
         let gpu_fan_speed = (0..nvml_try("Failed to get fan number", || device.num_fans())
             .unwrap_or(0))
-            .map(|i| nvml_try("Failed to get fan speed", || device.fan_speed(i)).ok())
+            .map(|data| nvml_try("Failed to get fan speed", || device.fan_speed(data)).ok())
             .collect();
         let gpu_temperature = nvml_try("Failed to get temperature(s)", || {
             device.temperature(TemperatureSensor::Gpu)
@@ -165,12 +194,12 @@ impl GpuMetrics {
             device.pcie_throughput(PcieUtilCounter::Send)
         })
         .ok()
-        .map(|s| s / 1_000);
+        .map(|data| data / 1_000);
         let gpu_pci_data_received = nvml_try("Failed to get PCI received data consumed", || {
             device.pcie_throughput(PcieUtilCounter::Receive)
         })
         .ok()
-        .map(|r| r / 1_000);
+        .map(|data| data / 1_000);
 
         // GPU utilization and memory
         let gpu_memory_free = gpu_memory_info.as_ref().map(|m| m.free as f32 / 1e9);
@@ -206,31 +235,6 @@ impl GpuMetrics {
             gpu_power_consumption,
             gpu_power_limit,
         }
-    }
-
-    /// Converts [`GpuMetrics`] into a JSON object.
-    fn to_json(&self) -> Value {
-        json!({
-            "gpu_architecture": self.gpu_arch.as_deref().map(Some).unwrap_or(None),
-            "gpu_bus_id": self.gpu_bus_id.as_deref().map(Some).unwrap_or(None),
-            "gpu_clock_graphic_MHz": self.gpu_clock_graphic.map(Some).unwrap_or(None),
-            "gpu_clock_memory_MHz": self.gpu_clock_memory.map(Some).unwrap_or(None),
-            "gpu_clock_sm_MHz": self.gpu_clock_sm.map(Some).unwrap_or(None),
-            "gpu_clock_video_MHz": self.gpu_clock_video.map(Some).unwrap_or(None),
-            "gpu_energy_consumption_mJ": self.gpu_energy_consumption.map(Some).unwrap_or(None),
-            "gpu_fan_speeds_%": self.gpu_fan_speed.iter().map(|&s| s.unwrap_or(0)).collect::<Vec<u32>>(),
-            "gpu_name": self.gpu_name.as_deref().map(Some).unwrap_or(None),
-            "gpu_usage_%": self.gpu_usage.map(Some).unwrap_or(None),
-            "gpu_temperature_°C": self.gpu_temperature.map(Some).unwrap_or(None),
-            "gpu_memory_free_GB": self.gpu_memory_free.map(Some).unwrap_or(None),
-            "gpu_memory_usage_%": self.gpu_memory_stat.map(Some).unwrap_or(None),
-            "gpu_memory_total_GB": self.gpu_memory_total.map(Some).unwrap_or(None),
-            "gpu_memory_usage_GB": self.gpu_memory_usage.map(Some).unwrap_or(None),
-            "gpu_pci_data_sent_MB": self.gpu_pci_data_sent.map(Some).unwrap_or(None),
-            "gpu_pci_data_received_MB": self.gpu_pci_data_received.map(Some).unwrap_or(None),
-            "gpu_power_consumption_mW": self.gpu_power_consumption.map(Some).unwrap_or(None),
-            "gpu_power_limit_mW": self.gpu_power_limit.map(Some).unwrap_or(None),
-        })
     }
 }
 
