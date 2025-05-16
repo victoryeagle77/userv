@@ -32,7 +32,8 @@ Currently, we collect the following data :
 
 * Board data
 
-  Retrieves data about the main board of the concerned IT equipment if are available :
+  Retrieves data about the main board of the concerned IT equipment if are
+  available :
 
   * board name.
   * board serial.
@@ -71,7 +72,8 @@ you can specifying a probe in binary arguments.
 ./userv --active probe_1,probe_2,...
 ```
 
-You can select a `probe` to get data components with the program, among the following probes list :
+You can select a `probe` to get data components with the program, among the following
+probes list :
 
 * board
 * cpu
