@@ -74,14 +74,14 @@ Currently, we collect some metrics concerning the following components:
   Retrieves data about the main board of the concerned IT equipment if are
   available:
 
-  * Board name.
-  * Board serial.
-  * Board version.
-  * Board vendor.
-  * Bios date.
-  * Bios release.
-  * Bios version.
-  * Bios vendor.
+  * Board full name.
+  * Board serial number.
+  * Board hardware version.
+  * Board vendor name.
+  * Bios release date.
+  * Bios release version.
+  * Bios software version.
+  * Bios vendor name.
 
 * Network data
 

@@ -26,13 +26,21 @@ const BOARD_FILES: [&str; 8] = [
 /// Collection of collected motherboard data.
 #[derive(Debug, Serialize)]
 struct BoardInfo {
+    /// Main board (or motherboard) full name.
     board_name: Option<String>,
+    /// Main board (or motherboard) serial number.
     board_serial: Option<String>,
+    /// Main board (or motherboard) hardware version.
     board_version: Option<String>,
+    /// Main board (or motherboard) vendor name.
     board_vendor: Option<String>,
+    /// BIOS release date.
     bios_date: Option<String>,
+    /// BIOS release version.
     bios_release: Option<String>,
+    /// BIOS software version.
     bios_version: Option<String>,
+    /// BIOS vendor name.
     bios_vendor: Option<String>,
 }
 
