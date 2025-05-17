@@ -13,7 +13,7 @@ use sysinfo::{Disk, DiskRefreshKind, Disks};
 use crate::utils::write_json_to_file;
 
 const HEADER: &str = "STORAGE";
-const LOGGER: &str = "log/disk_data.json";
+const LOGGER: &str = "log/storage_data.json";
 
 /// Collected more specific and detailed disk data.
 #[derive(Debug, Serialize)]
@@ -48,7 +48,6 @@ impl SmartInfo {
     /// * 194 : Temperature
     /// * 196 : Reallocation Event Count
     /// * 197 : Current Pending Sector Count
-    /// * 198 : Offline Uncorrectable
     ///
     /// # Arguments
     ///

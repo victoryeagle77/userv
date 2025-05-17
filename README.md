@@ -8,7 +8,18 @@ Version : 0.1.5
 
 ## Collected metrics
 
-Currently, we collect the following data:
+Currently, we collect some metrics concerning the following components:
+
+* CPU data
+
+  * CPU cores usage in %.
+  * CPU logical cores number.
+  * CPU physical cores number.
+  * CPU family foundation.
+  * CPU clock frequency in MHz
+  * CPU full model name.
+  * Temperatures by identified CPU thermal zone in °C.
+  * Power consumption in W (with RAPL domain zone analyze for INTEL).
 
 * GPU data
 
@@ -43,31 +54,6 @@ Currently, we collect the following data:
   * Process video encoding tasks in %.
   * Process memory utilization in %.
   * Process streaming multiprocessor utilization in %.
-
-* Processor data
-
-  * CPU cores usage in %.
-  * CPU logical cores number.
-  * CPU physical cores number.
-  * CPU family foundation.
-  * CPU clock frequency in MHz
-  * CPU full model name.
-  * Temperatures by identified CPU thermal zone in °C.
-  * Power consumption in W (with RAPL domain zone analyze for INTEL).
-
-* Storage devices data
-
-  Retrieves information about device storage (disks, SD card, etc...) of an IT
-  equipment. For each device detected, we retrieve the following data:
-
-  * Bandwidth for reading bytes in MB.
-  * Bandwidth for writing bytes in MB.
-  * File system path where the device is mounted.
-  * File system format of the device (ext, NTF, FAT, etc...).
-  * Device kind (HDD or SSD).
-  * Path name of the device on the system.
-  * Available memory space in MB.
-  * Total memory space in MB.
 
 * RAM memory data
 
@@ -107,7 +93,32 @@ Currently, we collect the following data:
   * Received data consumption in MB.
   * Transmitted data consumption in MB.
 
+* Storage devices data
+
+  Retrieves information about device storage (disks, SD card, etc...) of an IT
+  equipment. For each device detected, we retrieve the following data:
+
+  * Bandwidth for reading bytes in MB.
+  * Bandwidth for writing bytes in MB.
+  * File system path where the device is mounted.
+  * File system format of the device (ext, NTF, FAT, etc...).
+  * Device kind (HDD or SSD).
+  * Path name of the device on the system.
+  * Available memory space in MB.
+  * Total memory space in MB.
+
+  If it's possible, we can get also smart information about device storage:
+
+  * Reallocated sector count.
+  * Reallocation event count.
+  * Current pending sector count.
+  * Disk operating temperature.
+  * Power on hours.
+
 * System data
+
+  Retrieves all available data about the operating system where we run the
+  program:
 
   * Operating system distribution name.
   * Operating system distribution version.
@@ -156,3 +167,16 @@ probe list:
 * ram
 * storage
 * system
+
+In addition to these arguments, you can add the `freq` parameter to set an
+acquisition interval per second for the data collected by the probes:
+
+```bash
+./userv --active cpu,gpu --freq 5
+```
+
+Or with all probes:
+
+```bash
+./userv --all --freq 5
+```

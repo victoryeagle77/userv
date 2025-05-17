@@ -1,11 +1,15 @@
 use clap::{Parser, ValueEnum};
 use log::error;
 use probes::{
-    board_info::get_board_info, cpu_info::get_cpu_info, disk_info::get_disk_info,
-    gpu_info::get_gpu_info, net_info::get_net_info, ram_info::get_ram_info,
+    board_info::get_board_info, cpu_info::get_cpu_info, gpu_info::get_gpu_info,
+    net_info::get_net_info, ram_info::get_ram_info, storage_info::get_disk_info,
     system_info::get_system_info,
 };
-use std::{process::exit, thread};
+use std::{
+    process::exit,
+    thread::{sleep, spawn},
+    time::Duration,
+};
 use utils::init_logger;
 
 mod probes;
@@ -36,11 +40,14 @@ enum Component {
 #[derive(Parser, Debug)]
 struct Arg {
     /// List of [`Component`] to active.
-    #[arg(long, value_enum, value_delimiter = ',')]
+    #[arg(long, value_enum, value_delimiter = ',', conflicts_with = "all")]
     active: Vec<Component>,
     /// Activation state of a probe.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "active")]
     all: bool,
+    /// Interval in seconds between each probe run. If not set, probes run once.
+    #[arg(long, default_value_t = 0)]
+    freq: u64,
 }
 
 /// Parameters of probe that analyzing and retrieves data about a component.
@@ -140,16 +147,32 @@ fn main() {
         arg.active
     };
 
-    let mut handles = Vec::new();
-    for component in components {
-        let probe = Probe::get_probe(&component);
-        handles.push(thread::spawn(move || Probe::run_probe(probe)));
-    }
-
-    for handle in handles {
-        match handle.join() {
-            Ok(_) => println!("Finished task with success"),
-            Err(e) => error!("[{HEADER}] Process 'Failure in the thread' : {e:?}"),
+    if arg.freq == 0 {
+        let mut handles = Vec::new();
+        for component in components {
+            let probe = Probe::get_probe(&component);
+            handles.push(spawn(move || Probe::run_probe(probe)));
+        }
+        for handle in handles {
+            match handle.join() {
+                Ok(_) => println!("Finished task with success"),
+                Err(e) => error!("[{HEADER}] Process 'Failure in the thread' : {e:?}"),
+            }
+        }
+    } else {
+        loop {
+            let mut handles = Vec::new();
+            for component in &components {
+                let probe = Probe::get_probe(component);
+                handles.push(spawn(move || Probe::run_probe(probe)));
+            }
+            for handle in handles {
+                match handle.join() {
+                    Ok(_) => println!("Finished task with success"),
+                    Err(e) => error!("[{HEADER}] Process 'Failure in the thread' : {e:?}"),
+                }
+            }
+            sleep(Duration::from_secs(arg.freq));
         }
     }
 }
