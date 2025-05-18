@@ -22,11 +22,17 @@ const ARRAY_SIZE: usize = 1_000_000_000;
 const FACTOR: u64 = 1_000_000;
 
 const RAM_TYPE_POWER: &[(&str, f64)] = &[
+    ("SDRAM", 0.70),  // SDRAM : 3.3V, typically 5.5W for 8 Go => ~0.70 W/Go
+    ("DDR", 0.60),    // DDR1 : 2.5V, typically 5W for 8 Go => ~0.62 W/Go
+    ("DDR2", 0.48),   // DDR2 : 1.8V, typically 3.8W for 8 Go => ~0.48 W/Go
     ("DDR3", 0.45),   // DDR3 : 1.5V, typically 3 to 4W for 8 Go => ~0.38 to 0.50 W/Go
     ("DDR4", 0.32),   // DDR4 : 1.2V, typically 2 to 3W for 8 Go => ~0.25 to 0.38 W/Go
     ("DDR5", 0.25),   // DDR5 : 1.1V, typically 1.5 to 2.5W for 8 Go => ~0.19 to 0.31 W/Go
+    ("LPDDR2", 0.19), // LPDDR2 : 1.2V, typically 1.5W for 8 Go => ~0.19 W/Go
+    ("LPDDR3", 0.16), // LPDDR3 : 1.2V, typically 1.3W for 8 Go => ~0.16 W/Go
     ("LPDDR4", 0.16), // LPDDR4 : 1.1V, typically 1 to 1.5W for 8 Go => ~0.13 to 0.19 W/Go
     ("LPDDR5", 0.12), // LPDDR5 : 1.05V, typically 0.8 to 1.2W for 8 Go => ~0.10 to 0.15 W/Go
+    ("eMMC", 0.10),   // eMMC : 3.3V/1.8V, typically < 0.10 W/Go
 ];
 
 /// Collection of collected memory based in bytes.
