@@ -2,14 +2,15 @@ use clap::{Parser, ValueEnum};
 use log::error;
 use probes::{
     board_info::get_board_info, cpu_info::get_cpu_info, gpu_info::get_gpu_info,
-    net_info::get_net_info, ram_info::get_ram_info, storage_info::get_disk_info,
-    system_info::get_system_info,
+    net_info::get_net_info, storage_info::get_disk_info, system_info::get_system_info,
 };
 use std::{
     process::exit,
     thread::{sleep, spawn},
     time::Duration,
 };
+
+use ram::get_ram_info;
 use utils::init_logger;
 
 mod probes;
@@ -125,6 +126,7 @@ fn main() {
 
     let arg = Arg::parse();
     if !arg.all && arg.active.is_empty() {
+        error!("[{HEADER}] Arguments 'No probe specified'");
         eprintln!(
             "[{HEADER}] Arguments : No probe specified !\n\
             --all : Active all probes\n\
