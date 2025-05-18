@@ -11,7 +11,8 @@ Currently, we collect the following metrics concerning the RAM components:
 * `bandwidth_write` : Test bandwidth for writing bytes in MB/s.
 * `ram_available` : Available RAM memory in MB.
 * `ram_free` : Free RAM memory in MB.
-* `ram_power_consumption` : Power consumption according the type of detected memory in W.
+* `ram_power_consumption` : Power consumption retrieved according the detected
+type of memory in W.
 * `ram_total` : Total RAM memory available in MB.
 * `ram_types` : List of detected hardware device memory.
 * `ram_total` : RAM memory usage in MB.
