@@ -24,7 +24,9 @@ const LOGGER: &str = "log/cpu_data.json";
 /// Collection of collected CPU data
 #[derive(Debug, Serialize)]
 struct CpuInfo {
-    /// Model name.
+    /// CPU architecture label
+    architecture: Option<String>,
+    /// CPU model name.
     model: Option<String>,
     /// CPU generation.
     family: Option<String>,
@@ -46,6 +48,7 @@ impl CpuInfo {
     /// Converts the [`CpuInfo`] structure into a JSON value.
     fn to_json(&self) -> Value {
         json!({
+            "architectrue": self.architecture,
             "cores_physical": self.cores_physic,
             "cores_logical": self.cores_logic,
             "core_usage_%": self.cores_usage,
@@ -217,6 +220,7 @@ fn collect_cpu_data() -> Result<CpuInfo, Box<dyn Error>> {
     let cores_physic = System::physical_core_count();
     let cores_logic = Some(cpus.len());
 
+    let architecture = Some(System::cpu_arch());
     let model = cpus.first().map(|c| c.brand().to_string());
     let family = cpus.first().map(|c| c.vendor_id().to_string());
     let frequency = cpus.first().map(|c| c.frequency().to_string());
@@ -227,6 +231,7 @@ fn collect_cpu_data() -> Result<CpuInfo, Box<dyn Error>> {
     let power = get_rapl_consumption();
 
     Ok(CpuInfo {
+        architecture,
         cores_physic,
         cores_logic,
         cores_usage,

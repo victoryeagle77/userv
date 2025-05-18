@@ -28,14 +28,18 @@ struct ProcessInfo {
     disk_usage_read: Option<u64>,
     /// Writing disk usage by a process in MB.
     disk_usage_write: Option<u64>,
+    /// process group ID of the process.
+    id_group: Option<String>,
+    /// Session ID of a running process.
+    id_session: Option<usize>,
+    /// ID of the owner user of this process.
+    id_user: Option<String>,
     /// Memory usage by a process in MB.
     memory_usage: Option<u64>,
     /// Virtual memory usage by a process in MB.
     memory_virtual_usage: Option<u64>,
     /// State of a process on the system among `ProcessStatus`.
     status: Option<String>,
-    /// Session ID of a running process.
-    session: Option<usize>,
     /// Time the process has been running in minutes.
     run_time: Option<u64>,
 }
@@ -43,6 +47,8 @@ struct ProcessInfo {
 /// Collection of system load data.
 #[derive(Debug, Serialize)]
 struct SystemInfo {
+    /// System hostname based off DNS.
+    hostname: Option<String>,
     /// Average system load calculated (1 min, 5 min, 15 min).
     system_load: Option<(f64, f64, f64)>,
     /// Name of the current operating system.
@@ -51,12 +57,14 @@ struct SystemInfo {
     system_name: Option<String>,
     /// Name of the current operating system.
     system_version: Option<String>,
-    /// Time since the last system boot (days, hours, minutes).
-    uptime: Option<(u64, u64, u64)>,
+    /// Default maximum number of open files for a process.
+    open_files_limit: Option<usize>,
     /// Total number of processes.
     process_count: Option<u32>,
     /// Process information.
     processes: Option<Vec<ProcessInfo>>,
+    /// Time since the last system boot (days, hours, minutes).
+    uptime: Option<(u64, u64, u64)>,
 }
 
 impl ProcessInfo {
@@ -68,10 +76,12 @@ impl ProcessInfo {
             "cpu_usage_%": self.cpu_usage,
             "disk_usage_reade_MB": self.disk_usage_read,
             "disk_usage_write_MB": self.disk_usage_write,
+            "id_group": self.id_group,
+            "id_session": self.id_session,
+            "id_user": self.id_user,
             "memory_usage_MB": self.memory_usage,
             "memory_virtual_usage_MB": self.memory_virtual_usage,
             "status": self.status,
-            "session": self.session,
             "run_time_min": self.run_time,
         })
     }
@@ -81,6 +91,7 @@ impl SystemInfo {
     /// Converts [`SystemInfo`] into a JSON object.
     fn to_json(&self) -> Value {
         json!({
+            "hostname": self.hostname,
             "os_kernel": self.system_kernel,
             "os_name": self.system_name,
             "os_version": self.system_version,
@@ -89,13 +100,14 @@ impl SystemInfo {
                 "load_5_min": five,
                 "load_15_min": fifteen
             })),
+            "open_files_limit": self.open_files_limit,
+            "processes": self.processes.as_ref().map(|ps| ps.iter().map(|p| p.to_json()).collect::<Vec<_>>()),
+            "total_process": self.process_count,
             "uptime": self.uptime.map(|(days, hours, minutes)| json!({
                 "days": days,
                 "hours": hours,
                 "minutes": minutes
             })),
-            "total_process": self.process_count,
-            "processes": self.processes.as_ref().map(|ps| ps.iter().map(|p| p.to_json()).collect::<Vec<_>>()),
         })
     }
 
@@ -134,19 +146,24 @@ impl SystemInfo {
 
         // System info about process
         let name = Some(process.name().to_string_lossy().to_string());
-        let session = process.session_id().map(|pid| pid.into());
         let status = Some(process.status().to_string());
         let run_time = Some(process.run_time() / 60);
+
+        let id_group = process.group_id().map(|pid| pid.to_string());
+        let id_session = process.session_id().map(|pid| pid.into());
+        let id_user = process.user_id().map(|pid| pid.to_string());
 
         Ok(ProcessInfo {
             pid,
             cpu_usage,
             disk_usage_read,
             disk_usage_write,
+            id_group,
+            id_session,
+            id_user,
             memory_usage,
             memory_virtual_usage,
             name,
-            session,
             status,
             run_time,
         })
@@ -230,14 +247,19 @@ fn collect_system_data() -> Result<SystemInfo, Box<dyn Error>> {
         return Err("Data 'No processes found'".into());
     };
 
+    let hostname = System::host_name();
+    let open_files_limit = System::open_files_limit();
+
     Ok(SystemInfo {
+        hostname,
         system_kernel,
         system_load,
         system_name,
         system_version,
-        uptime,
+        open_files_limit,
         process_count,
         processes,
+        uptime,
     })
 }
 
