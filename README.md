@@ -4,8 +4,6 @@ This project involves analyzing the hardware of a computer system through a set
 of microservices, and providing information on the energy consumption and
 health status of the components using the collected data.
 
-Version : 0.1.5
-
 ## Collected metrics
 
 Currently, we collect some metrics concerning the following components:
@@ -56,18 +54,6 @@ Currently, we collect some metrics concerning the following components:
   * Process streaming multiprocessor utilization in %.
 
 * RAM memory data
-
-  Retrieves data about the computing and SWAP memory of an IT equipment:
-
-  * Available RAM in MB.
-  * Free RAM in MB.
-  * Total RAM available in MB.
-  * RAM usage in MB.
-  * Free SWAP memory in MB.
-  * Total SWAP memory in MB.
-  * Total SWAP usage in MB.
-  * Test bandwidth for reading bytes in MB/s.
-  * Test bandwidth for writing bytes in MB/s.
 
 * Board data
 
