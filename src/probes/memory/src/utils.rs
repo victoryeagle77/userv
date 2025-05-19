@@ -23,24 +23,6 @@ pub const FACTOR: &'static u64 = &1_000_000;
 /// Typical power consumption per GB for each memory type,
 /// based on voltage specifications and average module datasheets.
 ///
-/// # Sources
-///
-/// - [Wikipedia - SDRAM](https://en.wikipedia.org/wiki/Synchronous_dynamic_random-access_memory)
-/// - [Crucial - DDR vs DDR2 vs DDR3 vs DDR4](https://www.crucial.fr/articles/about-memory/difference-between-ddr2-ddr3-ddr4)
-/// - [Kingston - DDR2 vs DDR3](https://www.kingston.com/fr/blog/pc-performance/ddr2-vs-ddr3)
-/// - [Crucial - DDR3 Power Consumption](https://www.crucial.com/articles/about-memory/power-consumption-of-ddr3)
-/// - [FS.com - DDR3 vs DDR4 vs DDR5](https://community.fs.com/blog/ddr3-vs-ddr4-vs-ddr5.html)
-/// - [Tom's Hardware - DDR5 vs DDR4 Power](https://www.tomshardware.com/news/ddr5-vs-ddr4-ram)
-/// - [Micron - LPDDR2/LPDDR3 Power](https://www.micron.com/products/dram/lpdram)
-/// - [Logic-fruit - DDR3 vs DDR4 vs LPDDR4](https://www.logic-fruit.com/blogs/ddr3-vs-ddr4-vs-lpddr4/)
-/// - [Samsung - LPDDR5 Whitepaper](https://semiconductor.samsung.com/resources/white-paper/5th-generation-lpddr5/)
-/// - [Micron - eMMC Power Consumption](https://media-www.micron.com/-/media/client/global/documents/products/technical-note/nand-flash/tn2961_emmc_power_consumption.pdf)
-/// - [Kiatoo - DDR2/DDR3/DDR4/DDR5 Comparison (fr)](https://www.kiatoo.com/blog/ddr2-vs-ddr3-vs-ddr4-vs-ddr5/)
-/// - [Granite River Labs - Overview DDR Standards](https://graniteriverlabs.com/technology/ddr/)
-/// - [Reddit - Power consumption of RAM modules](https://www.reddit.com/r/buildapc/comments/7w3m2g/ram_power_consumption/)
-///
-/// Values are indicative and may vary depending on manufacturer, frequency, and module density.
-///
 /// | Type     | Voltage   | Typical for 8GB | W/GB |
 /// |----------|-----------|-----------------|------|
 /// | SDRAM    | 3.3V      | 5.5W            | 0.70 |
