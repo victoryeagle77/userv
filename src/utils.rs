@@ -16,9 +16,9 @@ use log4rs::{
     append::file::FileAppender,
     config::{Appender, Config, Root},
     encode::pattern::PatternEncoder,
-    filter::threshold::ThresholdFilter,
+    filter::threshold::ThresholdFilter, init_config,
 };
-use std::{error::Error, fs::write};
+use std::{error::Error, fs::{create_dir_all, write}, path::Path};
 
 const LOGGER: &str = "log/error.log";
 pub const HEADER: &str = "MAIN";
@@ -111,12 +111,16 @@ impl Probe {
 ///
 /// # Returns
 ///
-/// IO error message if log writing failed
+/// Writing the error in the log file.
+/// Print IO error message if log writing failed.
 pub fn init_logger() -> Result<(), Box<dyn Error>> {
+    if let Some(parent) = Path::new(LOGGER).parent() {
+        create_dir_all(parent)?;
+    }
+
     let logfile = FileAppender::builder()
         .encoder(Box::new(PatternEncoder::new("{d} {m} {n}")))
-        .build(LOGGER)
-        .unwrap();
+        .build(LOGGER)?;
 
     let config = Config::builder()
         .appender(
@@ -130,8 +134,8 @@ pub fn init_logger() -> Result<(), Box<dyn Error>> {
                 .build(LevelFilter::Error),
         )?;
 
-    write(LOGGER, "")?;
-    log4rs::init_config(config)?;
+    let _ = write(LOGGER, "");
+    init_config(config)?;
 
     Ok(())
 }

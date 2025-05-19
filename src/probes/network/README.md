@@ -32,3 +32,6 @@ to set an acquisition interval per second for the data collected by this probe:
 ```bash
 ./userv --active net --freq 5
 ```
+
+These commands will produce JSON files with all retrieved data about the
+concerning components.
