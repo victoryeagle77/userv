@@ -3,19 +3,26 @@
 This sub-module of the project analyzing the main board / motherboard hardware
 on a IT equipment, and providing information about it.
 
+## Requirements
+
+* Linux operating system.
+* Root permissions to have DMI files access available.
+
 ## Collected metrics
 
 Currently, we collect the following metrics concerning the board component,
 if are available:
 
-* Board full name.
-* Board serial number.
-* Board hardware version.
-* Board vendor name.
-* Bios release date.
-* Bios release version.
-* Bios software version.
-* Bios vendor name.
+|Name|Unity|Description|
+|----|-----|-----------|
+|`bios_date`|none|Bios release date|
+|`bios_release`|none|Bios release version|
+|`bios_version`|none|Bios software version|
+|`bios_vendor`|none|Bios vendor name|
+|`board_name`|none|Board full name|
+|`board_serial`|none|Board serial number|
+|`board_version`|none|Board hardware version|
+|`board_vendor`|none|Board vendor name|
 
 ## Usage
 

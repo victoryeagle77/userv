@@ -1,88 +1,79 @@
 //! # File utilities module
 
-use chrono::{SecondsFormat::Millis, Utc};
+use dmidecode::{EntryPoint, Structure};
 use log::error;
-use serde_json::{json, Value};
-use std::{collections::HashMap, error::Error, fs::read_to_string, fs::OpenOptions, io::Write};
+use serde::Serialize;
+use std::error::Error;
 
-pub const HEADER: &'static str = "BOARD";
-pub const LOGGER: &'static str = "log/board_data.json";
+const HEADER: &str = "BOARD";
 
-const BOARD_FILES: [&'static str; 8] = [
-    "/sys/class/dmi/id/board_name",
-    "/sys/class/dmi/id/board_serial",
-    "/sys/class/dmi/id/board_version",
-    "/sys/class/dmi/id/board_vendor",
-    "/sys/class/dmi/id/bios_date",
-    "/sys/class/dmi/id/bios_release",
-    "/sys/class/dmi/id/bios_vendor",
-    "/sys/class/dmi/id/bios_version",
-];
+/// Collection of collected motherboard data.
+#[derive(Debug, Serialize, PartialEq, Default)]
+pub struct BoardInfo {
+    /// BIOS release date version.
+    pub bios_date: Option<String>,
+    /// BIOS software version.
+    pub bios_version: Option<String>,
+    /// BIOS vendor name.
+    pub bios_vendor: Option<String>,
+    /// Main board (or motherboard) full name.
+    pub board_name: Option<String>,
+    /// Main board (or motherboard) serial number.
+    pub board_serial: Option<String>,
+    /// Main board (or motherboard) vendor name.
+    pub board_vendor: Option<String>,
+    /// Main board (or motherboard) hardware version.
+    pub board_version: Option<String>,
+}
 
-/// Retrieves data of the main motherboard.
-/// This function uses the `dmi` directory to gather motherboard information.
+/// Parse the `dmidecode` command output to get data on detected main board data.
 ///
 /// # Returns
 ///
-/// - `data`: Each element found for motherboard info.
-pub fn read_dmi_data() -> HashMap<String, String> {
-    let mut data = HashMap::new();
-    for &path in BOARD_FILES.iter() {
-        match read_to_string(path) {
-            Ok(content) => {
-                let key = path.rsplit('/').next().unwrap_or_default();
-                data.insert(key.to_string(), content.trim().to_string());
-            }
-            Err(e) => {
-                error!("[{HEADER}] Data 'Failed to read DMI file' {path} : {e}");
-            }
+/// - A tuple of data concerning device mother board or main board.
+/// - An error if no values are available.
+///
+/// # Operating
+///
+/// Root privileges are required.
+pub fn board_data_build(entry_buf: &[u8], dmi_buf: &[u8]) -> Result<BoardInfo, Box<dyn Error>> {
+    let entry = EntryPoint::search(entry_buf).map_err(|e| {
+        error!("[{HEADER}] Data 'EntryPoint search error': {e:?}");
+        Box::new(e) as Box<dyn Error>
+    })?;
+
+    let mut data = BoardInfo::default();
+
+    for table in entry.structures(dmi_buf).filter_map(Result::ok) {
+        if let Structure::Bios(bios) = &table {
+            data.bios_date = Some(bios.bios_release_date.to_string());
+            data.bios_version = Some(bios.bios_version.to_string());
+            data.bios_vendor = Some(bios.vendor.to_string());
+        } else if let Structure::BaseBoard(board) = &table {
+            data.board_name = Some(board.product.to_string());
+            data.board_serial = Some(board.serial.to_string());
+            data.board_vendor = Some(board.product.to_string());
+            data.board_version = Some(board.version.to_string());
         }
     }
-    data
+
+    Ok(data)
 }
 
-/// Writes JSON formatted data in a file
-///
-/// # Arguments
-///
-/// * `data` : JSON serialized collected metrics data to write
-/// * `path` : File path use to writing data
-///
-/// # Return
-///
-/// - Custom error message if an error occurs during JSON data serialization or file handling.
-pub fn write_json_to_file<F>(generator: F, path: &'static str) -> Result<(), Box<dyn Error>>
-where
-    F: FnOnce() -> Result<Value, Box<dyn Error>>,
-{
-    let mut data: Value = generator()?;
+//----------------//
+// UNIT CODE TEST //
+//----------------//
 
-    // Timestamp implementation in JSON object
-    let timestamp = Some(Utc::now().to_rfc3339_opts(Millis, true));
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    // Format data to JSON object
-    if data.is_object() {
-        data.as_object_mut()
-            .unwrap()
-            .insert("timestamp".to_owned(), json!(timestamp));
-    } else if data.is_array() {
-        for item in data.as_array_mut().unwrap() {
-            if item.is_object() {
-                item.as_object_mut()
-                    .unwrap()
-                    .insert("timestamp".to_owned(), json!(timestamp));
-            }
-        }
+    // Test `board_data_build` function with invalid data reading
+    #[test]
+    fn test_board_data_build_error() {
+        let invalid_entry_buf: &[u8] = b"invalid data";
+        let dmi_buf: &[u8] = &[];
+        let res = board_data_build(invalid_entry_buf, dmi_buf);
+        assert!(res.is_err());
     }
-
-    let mut file = OpenOptions::new()
-        .write(true)
-        .truncate(true)
-        .create(true)
-        .open(path)?;
-    let log = serde_json::to_string_pretty(&data)?;
-
-    file.write_all(log.as_bytes())?;
-
-    Ok(())
 }
