@@ -13,21 +13,22 @@ use utils::*;
 /// Collection of network data consumption.
 #[derive(Debug, Serialize)]
 struct NetworkInterface {
+    /// Interface Mac address.
     address_mac: Option<String>,
     /// Name of network interface.
     name: String,
     /// Received network packages in MB.
-    received: Option<u64>,
+    received: Option<f64>,
     /// Transmitted network packages in MB.
-    transmitted: Option<u64>,
+    transmitted: Option<f64>,
     /// Network errors received in MB.
-    errors_received: Option<u64>,
+    errors_received: Option<f64>,
     /// Network errors transmitted in MB.
-    errors_transmitted: Option<u64>,
+    errors_transmitted: Option<f64>,
     /// Number of incoming packets in MB.
-    packet_received: Option<u64>,
-    /// Number of outcoming packets in MB.
-    packet_transmitted: Option<u64>,
+    packet_received: Option<f64>,
+    /// Number of outcome packets in MB.
+    packet_transmitted: Option<f64>,
 }
 
 impl NetworkInterface {
@@ -41,30 +42,25 @@ impl NetworkInterface {
         NetworkInterface {
             address_mac: Some(network.mac_address().to_string()),
             name: name.to_string(),
-            received: Some(network.total_received()),
-            transmitted: Some(network.total_transmitted()),
-            errors_received: Some(network.total_errors_on_received()),
-            errors_transmitted: Some(network.total_errors_on_transmitted()),
-            packet_received: Some(network.total_packets_received()),
-            packet_transmitted: Some(network.total_packets_transmitted()),
+            received: Some(network.total_received() as f64 / FACTOR),
+            transmitted: Some(network.total_transmitted() as f64 / FACTOR),
+            errors_received: Some(network.total_errors_on_received() as f64 / FACTOR),
+            errors_transmitted: Some(network.total_errors_on_transmitted() as f64 / FACTOR),
+            packet_received: Some(network.total_packets_received() as f64 / FACTOR),
+            packet_transmitted: Some(network.total_packets_transmitted() as f64 / FACTOR),
         }
-    }
-
-    /// Convert bytes with a [`FACTOR`] size.
-    fn to_convert(opt: Option<u64>) -> Option<f64> {
-        opt.map(|v| v as f64 / FACTOR)
     }
 
     /// Converts [`NetworkInterface`] into a JSON object with MB values.
     fn to_json(&self) -> Value {
         json!({
             "address_mac": self.address_mac,
-            "received_MB": Self::to_convert(self.received),
-            "transmitted_MB": Self::to_convert(self.transmitted),
-            "errors_received_MB": Self::to_convert(self.errors_received),
-            "errors_transmitted_MB": Self::to_convert(self.errors_transmitted),
-            "packet_received_MB": Self::to_convert(self.packet_received),
-            "packet_transmitted_MB": Self::to_convert(self.packet_transmitted),
+            "received_MB": self.received,
+            "transmitted_MB": self.transmitted,
+            "errors_received_MB": self.errors_received,
+            "errors_transmitted_MB": self.errors_transmitted,
+            "packet_received_MB": self.packet_received,
+            "packet_transmitted_MB": self.packet_transmitted,
         })
     }
 }
