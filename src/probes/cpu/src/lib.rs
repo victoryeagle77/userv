@@ -2,52 +2,73 @@
 //!
 //! This module provides functionalities to retrieve processor data on Unix-based systems.
 
-use serde::Serialize;
-use serde_json::{json, Value};
+use chrono::{SecondsFormat, Utc};
+use rusqlite::{Connection, params};
 use std::{error::Error, thread::sleep};
 use sysinfo::{CpuRefreshKind, RefreshKind, System};
 
+mod dbms;
 mod utils;
-use crate::utils::*;
+use crate::{
+    dbms::*,
+    utils::{CpuInfo, get_cpu_temperature, get_cpu_usage, get_rapl_consumption},
+};
 
-/// Collection of collected CPU data
-#[derive(Debug, Serialize)]
-struct CpuInfo {
-    /// CPU architecture label
-    architecture: Option<String>,
-    /// CPU model name.
-    model: Option<String>,
-    /// CPU generation.
-    family: Option<String>,
-    /// CPU operating frequency in Mhz.
-    frequency: Option<String>,
-    /// Physical CPU cores.
-    cores_physic: Option<usize>,
-    /// Logical CPU cores.
-    cores_logic: Option<usize>,
-    /// CPU usage cores in percentage.
-    cores_usage: Option<Vec<(String, f32)>>,
-    /// CPU temperatures by zone in °C.
-    temperature: Option<Vec<(String, f32)>>,
-    /// CPU energy consumption by zone in uJ.
-    power: Option<Vec<(String, f64)>>,
-}
+use core::core::{db_insert_query, db_table_query_creation, init_db};
 
-impl CpuInfo {
-    /// Converts the [`CpuInfo`] structure into a JSON value.
-    fn to_json(&self) -> Value {
-        json!({
-            "architectrue": self.architecture,
-            "cores_physical": self.cores_physic,
-            "cores_logical": self.cores_logic,
-            "core_usage_%": self.cores_usage,
-            "family": self.family,
-            "frequency_MHz": self.frequency,
-            "model": self.model,
-            "power_consumption_W": self.power,
-            "temperatures_°C": self.temperature,
-        })
+/// Insert CPU parameters into the database.
+///
+/// # Arguments
+///
+/// - `timestamp` : Date trace to history identification.
+/// - `conn` : Allow by a [`Connection`] constructor type the connection with an SQLite database.
+/// - `data` : [`CpuInfo`] information to insert in database.
+///
+/// # Returns
+///
+/// - Insert the [`CpuInfo`] filled structure in an SQLite database.
+/// - Logs an error if the SQL insert request failed.
+pub fn insert_db(conn: &Connection, timestamp: &str, data: &CpuInfo) -> Result<(), Box<dyn Error>> {
+    // Insert main table
+    let query_info = db_insert_query(TABLE_NAME[0], &field_descriptor_info())?;
+    conn.execute(
+        &query_info,
+        params![
+            timestamp,
+            data.architecture,
+            data.model,
+            data.family,
+            data.frequency,
+            data.cores_physic,
+            data.cores_logic,
+        ],
+    )?;
+
+    // Insert secondary table "core"
+    if let Some(cores) = &data.cores_usage {
+        let query_core = db_insert_query(TABLE_NAME[1], &field_descriptor_core())?;
+        for (core_name, core) in cores {
+            conn.execute(&query_core, params![timestamp, core_name, core])?;
+        }
     }
+
+    // Insert secondary table "temperature"
+    if let Some(temps) = &data.temperature {
+        let query_temperature = db_insert_query(TABLE_NAME[2], &field_descriptor_temperature())?;
+        for (zone_name, temp) in temps {
+            conn.execute(&query_temperature, params![timestamp, zone_name, temp])?;
+        }
+    }
+
+    // Insert secondary table "power"
+    if let Some(powers) = &data.power {
+        let query_power = db_insert_query(TABLE_NAME[3], &field_descriptor_power())?;
+        for (zone_name, power) in powers {
+            conn.execute(&query_power, params![timestamp, zone_name, power])?;
+        }
+    }
+
+    Ok(())
 }
 
 /// Public function reading and using `/proc/cpuinfo` file values,
@@ -96,11 +117,22 @@ fn collect_cpu_data() -> Result<CpuInfo, Box<dyn Error>> {
     })
 }
 
-/// Public function used to send JSON formatted values,
+/// Public function used to send values in SQLite database,
 /// from [`collect_cpu_data`] function result.
 pub fn get_cpu_info() -> Result<(), Box<dyn Error>> {
+    let query_info = db_table_query_creation(TABLE_NAME[0], &field_descriptor_info())?;
+    let query_core = db_table_query_creation(TABLE_NAME[1], &field_descriptor_core())?;
+    let query_temperature =
+        db_table_query_creation(TABLE_NAME[2], &field_descriptor_temperature())?;
+    let query_power = db_table_query_creation(TABLE_NAME[3], &field_descriptor_power())?;
+
+    let conn = init_db(&query_info)?;
+    conn.execute_batch(&query_core)?;
+    conn.execute_batch(&query_temperature)?;
+    conn.execute_batch(&query_power)?;
+
+    let timestamp = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
     let data = collect_cpu_data()?;
-    let values = json!({ HEADER: data.to_json() });
-    write_json_to_file(|| Ok(values), LOGGER)?;
+    insert_db(&conn, &timestamp, &data)?;
     Ok(())
 }
