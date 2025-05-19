@@ -1,12 +1,18 @@
 [package]
 name = "memory"
+description = "Sub-module for memory devices analysis"
+edition.workspace = true
 version = "0.1.0"
-edition = "2021"
-description = "Program for memory devices analysis"
 
 [dependencies]
-log = "0.4"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-sysinfo = "0.35"
-chrono = "0.4"
+core.workspace = true
+
+chrono.workspace = true
+dmidecode.workspace = true
+log.workspace = true
+rusqlite.workspace = true
+serde = { workspace = true, features = ["derive"] }
+sysinfo.workspace = true
+
+[dev-dependencies]
+env_logger = "0.11"
