@@ -1,54 +1,55 @@
 //! # File utilities module
 
-use chrono::{SecondsFormat::Millis, Utc};
-use serde_json::{json, Value};
-use std::{error::Error, fs::OpenOptions, io::Write};
+use serde::Serialize;
 
 pub const HEADER: &'static str = "STORAGE";
-pub const LOGGER: &'static str = "log/storage_data.json";
 
-/// Writes JSON formatted data in a file
-///
-/// # Arguments
-///
-/// * `data` : JSON serialized collected metrics data to write
-/// * `path` : File path use to writing data
-///
-/// # Return
-///
-/// - Custom error message if an error occurs during JSON data serialization or file handling.
-pub fn write_json_to_file<F>(generator: F, path: &'static str) -> Result<(), Box<dyn Error>>
-where
-    F: FnOnce() -> Result<Value, Box<dyn Error>>,
-{
-    let mut data: Value = generator()?;
+/// Collected global disk data.
+#[derive(Debug, Serialize)]
+pub struct DiskInfo {
+    /// Disk reading data transfer in MB.
+    pub bandwidth_read: Option<u64>,
+    /// Disk writing data transfer in MB.
+    pub bandwidth_write: Option<u64>,
+    /// Estimated consumed energy in W.
+    pub energy_consumed: Option<f64>,
+    /// Path on the system where the disk device is mounted.
+    pub file_mount: Option<String>,
+    /// Disk file system type (ext, NTF, FAT...).
+    pub file_system: Option<String>,
+    /// Disk device type (HDD, SDD).
+    pub kind: Option<String>,
+    /// Disk path name on the system.
+    pub name: String,
+    /// Disk used memory space.
+    pub space_available: Option<u64>,
+    /// Disk total memory space.
+    pub space_total: Option<u64>,
+    /// Retrieves more detailed information with [`SmartInfo`].
+    pub smart_info: Option<SmartInfo>,
+}
 
-    // Timestamp implementation in JSON object
-    let timestamp = Some(Utc::now().to_rfc3339_opts(Millis, true));
+/// Collected more specific and detailed disk data.
+#[derive(Debug, Serialize)]
+pub struct SmartInfo {
+    /// Reallocated sector count.
+    pub sectors_reallocated: Option<u8>,
+    /// Reallocation event count.
+    pub sectors_pending: Option<u8>,
+    /// Current pending sector count.
+    pub sectors_pending_current: Option<u8>,
+    /// Disk operating temperature.
+    pub temperature: Option<u8>,
+    /// Power on Hours.
+    pub uptime_hours: Option<u8>,
+}
 
-    // Format data to JSON object
-    if data.is_object() {
-        data.as_object_mut()
-            .unwrap()
-            .insert("timestamp".to_owned(), json!(timestamp));
-    } else if data.is_array() {
-        for item in data.as_array_mut().unwrap() {
-            if item.is_object() {
-                item.as_object_mut()
-                    .unwrap()
-                    .insert("timestamp".to_owned(), json!(timestamp));
-            }
-        }
-    }
-
-    let mut file = OpenOptions::new()
-        .write(true)
-        .truncate(true)
-        .create(true)
-        .open(path)?;
-    let log = serde_json::to_string_pretty(&data)?;
-
-    file.write_all(log.as_bytes())?;
-
-    Ok(())
+pub fn estimate_energy(kind: &str, read_mb: u64, write_mb: u64) -> f64 {
+    let (read_energy, write_energy) = match kind {
+        k if k.contains("HDD") => (0.006, 0.006),
+        k if k.contains("SSD") => (0.0036, 0.0036),
+        k if k.contains("NVMe") => (0.005, 0.005),
+        _ => (0.005, 0.005),
+    };
+    (read_mb as f64) * read_energy + (write_mb as f64) * write_energy
 }

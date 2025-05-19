@@ -1,109 +1,120 @@
 //! # Lib file for network data module
 //!
-//! This module provides functionality to retrieve internet data consumption.
+//! This module provides main functionality to retrieve network data on Unix-based systems.
 
-use serde::Serialize;
-use serde_json::{json, Value};
-use std::{collections::HashMap, error::Error, thread::sleep, time::Duration};
-use sysinfo::{NetworkData, Networks};
+use chrono::{SecondsFormat, Utc};
+use rusqlite::{params, Connection};
+use std::{error::Error, path::Path, thread, time::Duration};
+use sysinfo::Networks;
 
 mod utils;
-use utils::*;
+use utils::NetworkInterface;
 
-/// Collection of network data consumption.
-#[derive(Debug, Serialize)]
-struct NetworkInterface {
-    address_mac: Option<String>,
-    /// Name of network interface.
-    name: String,
-    /// Received network packages in MB.
-    received: Option<u64>,
-    /// Transmitted network packages in MB.
-    transmitted: Option<u64>,
-    /// Network errors received in MB.
-    errors_received: Option<u64>,
-    /// Network errors transmitted in MB.
-    errors_transmitted: Option<u64>,
-    /// Number of incoming packets in MB.
-    packet_received: Option<u64>,
-    /// Number of outcoming packets in MB.
-    packet_transmitted: Option<u64>,
-}
+const DATABASE: &'static str = "log/data.db";
 
-impl NetworkInterface {
-    /// For each network interface
-    ///
-    /// # Arguments
-    ///
-    /// - `name` : Name of the network interface used
-    /// - `network` : Corresponding network data to the network interface.
-    fn from_interface(name: &str, network: &NetworkData) -> Self {
-        NetworkInterface {
-            address_mac: Some(network.mac_address().to_string()),
-            name: name.to_string(),
-            received: Some(network.total_received()),
-            transmitted: Some(network.total_transmitted()),
-            errors_received: Some(network.total_errors_on_received()),
-            errors_transmitted: Some(network.total_errors_on_transmitted()),
-            packet_received: Some(network.total_packets_received()),
-            packet_transmitted: Some(network.total_packets_transmitted()),
-        }
-    }
-
-    /// Convert bytes with a [`FACTOR`] size.
-    fn to_convert(opt: Option<u64>) -> Option<f64> {
-        opt.map(|v| v as f64 / FACTOR)
-    }
-
-    /// Converts [`NetworkInterface`] into a JSON object with MB values.
-    fn to_json(&self) -> Value {
-        json!({
-            "address_mac": self.address_mac,
-            "received_MB": Self::to_convert(self.received),
-            "transmitted_MB": Self::to_convert(self.transmitted),
-            "errors_received_MB": Self::to_convert(self.errors_received),
-            "errors_transmitted_MB": Self::to_convert(self.errors_transmitted),
-            "packet_received_MB": Self::to_convert(self.packet_received),
-            "packet_transmitted_MB": Self::to_convert(self.packet_transmitted),
-        })
-    }
-}
-
-/// Collects detailed network interface data.
+/// Initialize the SQLite database and create the table if needed.
+///
+/// # Arguments
+///
+/// - `path` : Path to database file.
 ///
 /// # Returns
 ///
-/// - A vector of [`NetworkInterface`] containing network data consumption.
-/// - An error when no valid network interface found.
-fn collect_net_data() -> Result<HashMap<String, Value>, Box<dyn Error>> {
-    let mut networks = Networks::new_with_refreshed_list();
-    sleep(Duration::from_millis(10));
-    networks.refresh(true);
-
-    let mut data = HashMap::new();
-
-    for (name, network) in &networks {
-        if name.trim().is_empty() {
-            return Err("Data 'Network interface with empty name found'"
-                .to_string()
-                .into());
-        }
-        let interface = NetworkInterface::from_interface(name, network);
-        data.insert(name.to_string(), interface.to_json());
-    }
-
-    if data.is_empty() {
-        Err("Data 'No valid network interfaces found'".into())
-    } else {
-        Ok(data)
-    }
+/// - A [`Connection`] constructor to initialize database parameters.
+/// - An error if the table creation or database initialization failed.
+fn init_db(path: &'static str) -> Result<Connection, Box<dyn Error>> {
+    let conn = Connection::open(Path::new(path))?;
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS network_interfaces (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            name TEXT NOT NULL,
+            address_mac TEXT,
+            network_type TEXT NOT NULL,
+            received_MB REAL,
+            transmitted_MB REAL,
+            errors_received_MB REAL,
+            errors_transmitted_MB REAL,
+            packet_received_MB REAL,
+            packet_transmitted_MB REAL,
+            estimated_energy_Wh REAL,
+            average_power_W REAL
+        )",
+    )?;
+    Ok(conn)
 }
 
-/// Public function used to send JSON formatted values,
-/// from [`collect_net_data`] function result.
+/// Insert network interface parameters into the database.
+///
+/// # Arguments
+///
+/// - `conn` : Allow by a [`Connection`] constructor type the connection with an SQLite database.
+/// - `data` : The data structure to insert in database.
+///
+/// # Returns
+///
+/// - Insert the [`NetworkInterface`] filled structure in an SQLite database.
+/// - Logs an error if the SQL insert request failed.
+fn insert_db(
+    conn: &Connection,
+    timestamp: &str,
+    data: &NetworkInterface,
+) -> Result<(), Box<dyn Error>> {
+    conn.execute(
+        "INSERT INTO network_interfaces (
+            timestamp,
+            name,
+            address_mac,
+            network_type,
+            received_MB,
+            transmitted_MB,
+            errors_received_MB,
+            errors_transmitted_MB,
+            packet_received_MB,
+            packet_transmitted_MB,
+            estimated_energy_Wh,
+            average_power_W
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        params![
+            timestamp,
+            data.name,
+            data.address_mac,
+            format!("{:?}", data.network_type),
+            data.received,
+            data.transmitted,
+            data.errors_received,
+            data.errors_transmitted,
+            data.packet_received,
+            data.packet_transmitted,
+            data.estimated_energy,
+            data.average_power,
+        ],
+    )?;
+    Ok(())
+}
+
+fn collect_network_data(networks: &Networks) -> Vec<NetworkInterface> {
+    networks
+        .iter()
+        .filter(|(name, _)| !name.trim().is_empty())
+        .map(|(name, network)| NetworkInterface::from_interface(name, network))
+        .collect()
+}
+
+/// Public function used to collecting network data,
+/// and stores [`collect_network_data`] function result in an SQLite database.
 pub fn get_net_info() -> Result<(), Box<dyn Error>> {
-    let data = collect_net_data()?;
-    let values = json!({ HEADER: data });
-    write_json_to_file(|| Ok(values), LOGGER)?;
+    let conn = init_db(DATABASE)?;
+    let mut networks = Networks::new_with_refreshed_list();
+    thread::sleep(Duration::from_millis(10));
+    networks.refresh(true);
+
+    let timestamp = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+    let interfaces = collect_network_data(&networks);
+
+    for interface in interfaces {
+        insert_db(&conn, &timestamp, &interface)?;
+    }
+
     Ok(())
 }

@@ -2,75 +2,80 @@
 //!
 //! This module provides functionalities to retrieve motherboard / main board and bios data on Unix-based systems.
 
+use chrono::{SecondsFormat, Utc};
 use log::error;
-use serde::Serialize;
-use serde_json::{json, Value};
-use std::error::Error;
+use rusqlite::{params, Connection};
+use std::{error::Error, path::Path};
 
 mod utils;
 use utils::*;
 
-/// Collection of collected motherboard data.
-#[derive(Debug, Serialize)]
-struct BoardInfo {
-    /// Main board (or motherboard) full name.
-    board_name: Option<String>,
-    /// Main board (or motherboard) serial number.
-    board_serial: Option<String>,
-    /// Main board (or motherboard) hardware version.
-    board_version: Option<String>,
-    /// Main board (or motherboard) vendor name.
-    board_vendor: Option<String>,
-    /// BIOS release date.
-    bios_date: Option<String>,
-    /// BIOS release version.
-    bios_release: Option<String>,
-    /// BIOS software version.
-    bios_version: Option<String>,
-    /// BIOS vendor name.
-    bios_vendor: Option<String>,
+const DATABASE: &'static str = "log/data.db";
+
+/// Initialize the SQLite database and create the table if needed.
+///
+/// # Arguments
+///
+/// - `path` : Path to database file.
+///
+/// # Returns
+///
+/// - A [`Connection`] constructor to initialize database parameters.
+/// - An error if the table creation or database initialization failed.
+fn init_db(path: &'static str) -> Result<Connection, Box<dyn Error>> {
+    let conn = Connection::open(Path::new(path))?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS board_data (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT,
+            bios_date TEXT,
+            bios_release TEXT,
+            bios_version TEXT,
+            board_name TEXT,
+            board_serial TEXT,
+            board_version TEXT,
+            board_vendor TEXT
+        )",
+        [],
+    )?;
+    Ok(conn)
 }
 
-impl BoardInfo {
-    /// Converts [`BoardInfo`] into a JSON object.
-    fn to_json(&self) -> Value {
-        json!({
-            "motherboard_name": self.board_name,
-            "motherboard_serial": self.board_serial,
-            "motherboard_version": self.board_version,
-            "motherboard_vendor": self.board_vendor,
-            "bios_date": self.bios_date,
-            "bios_release": self.bios_release,
-            "bios_version": self.bios_version,
-            "bios_vendor": self.bios_vendor,
-        })
-    }
-
-    /// Check if we have no information available to store in [`BoardInfo`].
-    fn is_empty(&self) -> bool {
-        self.board_name.is_none()
-            && self.board_serial.is_none()
-            && self.board_version.is_none()
-            && self.board_vendor.is_none()
-            && self.bios_date.is_none()
-            && self.bios_release.is_none()
-            && self.bios_vendor.is_none()
-            && self.bios_version.is_none()
-    }
-
-    /// Filling all field of [`BoardInfo`] with null value by default.
-    fn default() -> Self {
-        BoardInfo {
-            board_name: None,
-            board_serial: None,
-            board_version: None,
-            board_vendor: None,
-            bios_date: None,
-            bios_release: None,
-            bios_vendor: None,
-            bios_version: None,
-        }
-    }
+/// Insert network interface parameters into the database.
+///
+/// # Arguments
+///
+/// - `conn` : Allow by a [`Connection`] constructor type the connection with an SQLite database.
+/// - `data` : The data structure to insert in database.
+///
+/// # Returns
+///
+/// - Insert the [`NetworkInterface`] filled structure in an SQLite database.
+/// - Logs an error if the SQL insert request failed.
+fn insert_db(conn: &Connection, timestamp: &str, data: &BoardInfo) -> Result<(), Box<dyn Error>> {
+    conn.execute(
+        "INSERT INTO board_data (
+            timestamp,
+            bios_date,
+            bios_release,
+            bios_version,
+            board_name,
+            board_serial,
+            board_version,
+            board_vendor
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![
+            timestamp,
+            data.bios_date,
+            data.bios_release,
+            data.bios_version,
+            data.board_name,
+            data.board_serial,
+            data.board_version,
+            data.board_vendor
+        ],
+    )?;
+    Ok(())
 }
 
 /// Retrieves information about the motherboard of an IT equipment.
@@ -125,8 +130,9 @@ fn collect_board_data() -> Result<BoardInfo, Box<dyn Error>> {
 /// Public function used to send JSON formatted values,
 /// from [`collect_board_data`] function result.
 pub fn get_board_info() -> Result<(), Box<dyn Error>> {
+    let mut conn = init_db(DATABASE)?;
+    let timestamp = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
     let data = collect_board_data()?;
-    let values = json!({ HEADER: data.to_json() });
-    write_json_to_file(|| Ok(values), LOGGER)?;
+    insert_db(&mut conn, &timestamp, &data)?;
     Ok(())
 }
