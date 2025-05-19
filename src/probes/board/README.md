@@ -8,14 +8,14 @@ on a IT equipment, and providing information about it.
 Currently, we collect the following metrics concerning the board component,
 if are available:
 
-* Board full name.
-* Board serial number.
-* Board hardware version.
-* Board vendor name.
-* Bios release date.
-* Bios release version.
-* Bios software version.
-* Bios vendor name.
+* `bios_date` : Bios release date.
+* `bios_release` : Bios release version.
+* `bios_version` : Bios software version.
+* `bios_vendor` : Bios vendor name.
+* `board_name` : Board full name.
+* `board_serial` : Board serial number.
+* `board_version` : Board hardware version.
+* `board_vendor` : Board vendor name.
 
 ## Usage
 
