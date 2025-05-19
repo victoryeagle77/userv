@@ -1,6 +1,4 @@
 //! # File utilities
-//!
-//! This file provides some functionalities to handle probes for the Main calling.
 
 use board::get_board_info;
 use cpu::get_cpu_info;
@@ -16,9 +14,14 @@ use log4rs::{
     append::file::FileAppender,
     config::{Appender, Config, Root},
     encode::pattern::PatternEncoder,
-    filter::threshold::ThresholdFilter, init_config,
+    filter::threshold::ThresholdFilter,
+    init_config,
 };
-use std::{error::Error, fs::{create_dir_all, write}, path::Path};
+use std::{
+    error::Error,
+    fs::{create_dir_all, write},
+    path::Path,
+};
 
 const LOGGER: &str = "log/error.log";
 pub const HEADER: &str = "MAIN";
@@ -64,7 +67,7 @@ impl Probe {
     pub fn get_probe(component: &Component) -> Probe {
         match component {
             Component::Board => Probe {
-                label: "MOTHERBOARD",
+                label: "BOARD",
                 func: get_board_info,
             },
             Component::Cpu => Probe {
