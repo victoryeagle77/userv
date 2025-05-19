@@ -1,11 +1,11 @@
-# RAM
+# Memory
 
 This sub-module of the project analyzing the memory hardware on a IT equipment,
 and providing information about the types of detected memories.
 
 ## Collected metrics
 
-Currently, we collect the following metrics concerning the RAM components:
+Currently, we collect the following metrics concerning the memory component:
 
 * `bandwidth_read` : Test bandwidth for reading bytes in MB/s.
 * `bandwidth_write` : Test bandwidth for writing bytes in MB/s.
@@ -22,7 +22,7 @@ type of memory in W.
 
 ## Usage
 
-To run the program to retrieve the information from the RAM,
+To run the program to retrieve the information from the memory,
 you can specify its corresponding probe in binary arguments.
 
 ```bash
@@ -30,7 +30,7 @@ you can specify its corresponding probe in binary arguments.
 ```
 
 In addition to this argument, you can add the `freq` parameter,
-to set an acquisition interval per second for the data collected by the probes:
+to set an acquisition interval per second for the data collected by this probe:
 
 ```bash
 ./userv --active ram --freq 5

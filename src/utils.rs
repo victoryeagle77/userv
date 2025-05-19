@@ -1,19 +1,111 @@
-//! # File utilities module
+//! # File utilities
 //!
-//! This module provides functionality to handle or get data from files and folders.
+//! This file provides some functionalities to handle probes for the Main calling.
 
-use chrono::{SecondsFormat::Millis, Utc};
-use log::LevelFilter;
+use board::get_board_info;
+use cpu::get_cpu_info;
+use gpu::get_gpu_info;
+use memory::get_mem_info;
+use network::get_net_info;
+use storage::get_storage_info;
+use system::get_system_info;
+
+use clap::ValueEnum;
+use log::{error, LevelFilter};
 use log4rs::{
     append::file::FileAppender,
     config::{Appender, Config, Root},
     encode::pattern::PatternEncoder,
     filter::threshold::ThresholdFilter,
 };
-use serde_json::{json, Value};
-use std::{error::Error, fs::write, fs::OpenOptions, io::Write};
+use std::{error::Error, fs::write};
 
 const LOGGER: &str = "log/error.log";
+pub const HEADER: &str = "MAIN";
+
+/// Enumeration of available arguments corresponding to a component
+#[derive(Debug, Clone, ValueEnum)]
+pub enum Component {
+    /// Motherboard or principal system board probe data.
+    Board,
+    /// CPU probe data.
+    Cpu,
+    /// GPU device probe data.
+    Gpu,
+    /// Network probe data.
+    Net,
+    /// Computing memory probe data.
+    Memory,
+    /// Storage device probe data.
+    Storage,
+    /// Operating system probe data.
+    System,
+}
+
+/// Parameters of probe that analyzing and retrieves data about a component.
+pub struct Probe {
+    /// Identification header for information loggers about a probe.
+    label: &'static str,
+    /// Function concerning data retrieves by a probe.
+    func: fn() -> Result<(), Box<dyn std::error::Error>>,
+}
+
+impl Probe {
+    /// Define the probe and the label associated to a component,
+    /// and check if it is selected.
+    ///
+    /// # Arguments
+    ///
+    /// - `component` : The component that we want retrieves data.
+    ///
+    /// # Returns
+    ///
+    /// The selected component via [`Probe`] information.
+    pub fn get_probe(component: &Component) -> Probe {
+        match component {
+            Component::Board => Probe {
+                label: "MOTHERBOARD",
+                func: get_board_info,
+            },
+            Component::Cpu => Probe {
+                label: "CPU",
+                func: get_cpu_info,
+            },
+            Component::Gpu => Probe {
+                label: "GPU",
+                func: get_gpu_info,
+            },
+            Component::Net => Probe {
+                label: "NETWORK",
+                func: get_net_info,
+            },
+            Component::Memory => Probe {
+                label: "MEMORY",
+                func: get_mem_info,
+            },
+            Component::Storage => Probe {
+                label: "STORAGE",
+                func: get_storage_info,
+            },
+            Component::System => Probe {
+                label: "SYSTEM",
+                func: get_system_info,
+            },
+        }
+    }
+
+    /// Run a probe to retrieve information about a component.
+    /// If component's data can't be retrieved, we log the error returned.
+    ///
+    /// # Arguments
+    ///
+    /// - `probe` : Concerning component with [`Probe`].
+    pub fn run_probe(probe: Probe) {
+        if let Err(e) = (probe.func)() {
+            error!("[{}] {e}", probe.label);
+        }
+    }
+}
 
 /// Initialization and formatting information logger to store messages concerning microservices behavior.
 ///
@@ -40,52 +132,6 @@ pub fn init_logger() -> Result<(), Box<dyn Error>> {
 
     write(LOGGER, "")?;
     log4rs::init_config(config)?;
-
-    Ok(())
-}
-
-/// Writes JSON formatted data in a file
-///
-/// # Arguments
-///
-/// * `data` : JSON serialized collected metrics data to write
-/// * `path` : File path use to writing data
-///
-/// # Return
-///
-/// - Custom error message if an error occurs during JSON data serialization or file handling.
-pub fn write_json_to_file<F>(generator: F, path: &str) -> Result<(), Box<dyn Error>>
-where
-    F: FnOnce() -> Result<Value, Box<dyn Error>>,
-{
-    let mut data: Value = generator()?;
-
-    // Timestamp implementation in JSON object
-    let timestamp = Some(Utc::now().to_rfc3339_opts(Millis, true));
-
-    // Format data to JSON object
-    if data.is_object() {
-        data.as_object_mut()
-            .unwrap()
-            .insert("timestamp".to_owned(), json!(timestamp));
-    } else if data.is_array() {
-        for item in data.as_array_mut().unwrap() {
-            if item.is_object() {
-                item.as_object_mut()
-                    .unwrap()
-                    .insert("timestamp".to_owned(), json!(timestamp));
-            }
-        }
-    }
-
-    let mut file = OpenOptions::new()
-        .write(true)
-        .truncate(true)
-        .create(true)
-        .open(path)?;
-    let log = serde_json::to_string_pretty(&data)?;
-
-    file.write_all(log.as_bytes())?;
 
     Ok(())
 }

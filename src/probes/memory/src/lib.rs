@@ -1,6 +1,6 @@
 //! # Lib file for memory data module
 //!
-//! This module provides main functionality to retrieve RAM and SWAP memories data on Unix-based systems.
+//! This module provides main functionality to retrieve memories data on Unix-based systems.
 
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -12,7 +12,7 @@ use crate::utils::*;
 
 /// Collection of collected memory based in bytes.
 #[derive(Serialize)]
-struct RAMInfo {
+struct MemInfo {
     /// Memory reading bandwidth test in MB/s.
     bandwidth_read: Option<f64>,
     /// Memory writing bandwidth test in MB/s.
@@ -37,8 +37,8 @@ struct RAMInfo {
     swap_used: Option<u64>,
 }
 
-impl RAMInfo {
-    /// Converts [`RAMInfo`] into a JSON object.
+impl MemInfo {
+    /// Converts [`MemInfo`] into a JSON object.
     fn to_json(&self) -> Value {
         json!({
             "bandwidth_read_MB.s": self.bandwidth_read,
@@ -60,13 +60,13 @@ impl RAMInfo {
 ///
 /// # Returns
 ///
-/// - Completed [`RAMInfo`] structure with all memories information.
+/// - Completed [`MemInfo`] structure with all memories information.
 /// - An error when some important and critical metrics can't be retrieved.
-fn collect_ram_data() -> Result<RAMInfo, Box<dyn Error>> {
+fn collect_mem_data() -> Result<MemInfo, Box<dyn Error>> {
     let mut sys = System::new_all();
     sys.refresh_memory_specifics(MemoryRefreshKind::everything());
 
-    let (bandwidth_write, bandwidth_read) = get_ram_test()?;
+    let (bandwidth_write, bandwidth_read) = get_mem_test()?;
 
     let ram_total = sys.total_memory() / FACTOR;
     let ram_used = sys.used_memory() / FACTOR;
@@ -78,19 +78,19 @@ fn collect_ram_data() -> Result<RAMInfo, Box<dyn Error>> {
     let swap_free = Some(sys.free_swap() / FACTOR);
     let swap_used = Some(sys.used_swap() / FACTOR);
 
-    let types = get_ram_types()?.filter(|data| !data.is_empty());
+    let types = get_mem_types()?.filter(|data| !data.is_empty());
     let (ram_types, ram_power_consumption) = match types {
         Some(ref data) if !data.is_empty() => {
             let power = data
                 .iter()
-                .filter_map(|data| ram_power_consumption(ram_total, ram_used, data))
+                .filter_map(|data| mem_power_consumption(ram_total, ram_used, data))
                 .collect();
             (Some(data.clone()), Some(power))
         }
         _ => (None, None),
     };
 
-    Ok(RAMInfo {
+    Ok(MemInfo {
         ram_available,
         ram_free,
         ram_types,
@@ -106,9 +106,9 @@ fn collect_ram_data() -> Result<RAMInfo, Box<dyn Error>> {
 }
 
 /// Public function used to send JSON formatted values,
-/// from [`collect_ram_data`] function result.
-pub fn get_ram_info() -> Result<(), Box<dyn Error>> {
-    let data = collect_ram_data()?;
+/// from [`collect_mem_data`] function result.
+pub fn get_mem_info() -> Result<(), Box<dyn Error>> {
+    let data = collect_mem_data()?;
     let values = json!({ HEADER: data.to_json() });
     write_json_to_file(|| Ok(values), LOGGER)?;
     Ok(())

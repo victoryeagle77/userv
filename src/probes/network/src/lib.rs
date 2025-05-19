@@ -1,4 +1,4 @@
-//! # Net data Module
+//! # Lib file for network data module
 //!
 //! This module provides functionality to retrieve internet data consumption.
 
@@ -7,11 +7,8 @@ use serde_json::{json, Value};
 use std::{collections::HashMap, error::Error, thread::sleep, time::Duration};
 use sysinfo::Networks;
 
-use crate::utils::write_json_to_file;
-
-const FACTOR: f64 = 1e6;
-const HEADER: &str = "NETWORK";
-const LOGGER: &str = "log/net_data.json";
+mod utils;
+use utils::*;
 
 /// Collection of network data consumption.
 #[derive(Debug, Serialize)]
@@ -19,19 +16,23 @@ struct NetworkInterface {
     address_mac: Option<String>,
     /// Name of network interface.
     name: String,
-    /// Received network packages in bytes.
+    /// Received network packages in MB.
     received: Option<u64>,
-    /// Transmitted network packages in bytes.
+    /// Transmitted network packages in MB.
     transmitted: Option<u64>,
+    /// Network errors received in MB.
     errors_received: Option<u64>,
+    /// Network errors transmitted in MB.
     errors_transmitted: Option<u64>,
+    /// Number of incoming packets in MB.
     packet_received: Option<u64>,
+    /// Number of outcoming packets in MB.
     packet_transmitted: Option<u64>,
 }
 
 impl NetworkInterface {
     /// Convert bytes with a [`FACTOR`] size.
-    fn convert(opt: Option<u64>) -> Option<f64> {
+    fn to_convert(opt: Option<u64>) -> Option<f64> {
         opt.map(|v| v as f64 / FACTOR)
     }
 
@@ -39,12 +40,12 @@ impl NetworkInterface {
     fn to_json(&self) -> Value {
         json!({
             "address_mac": self.address_mac,
-            "received_MB": Self::convert(self.received),
-            "transmitted_MB": Self::convert(self.transmitted),
-            "errors_received_MB": Self::convert(self.errors_received),
-            "errors_transmitted_MB": Self::convert(self.errors_transmitted),
-            "packet_received_MB": Self::convert(self.packet_received),
-            "packet_transmitted_MB": Self::convert(self.packet_transmitted),
+            "received_MB": Self::to_convert(self.received),
+            "transmitted_MB": Self::to_convert(self.transmitted),
+            "errors_received_MB": Self::to_convert(self.errors_received),
+            "errors_transmitted_MB": Self::to_convert(self.errors_transmitted),
+            "packet_received_MB": Self::to_convert(self.packet_received),
+            "packet_transmitted_MB": Self::to_convert(self.packet_transmitted),
         })
     }
 }
@@ -55,7 +56,7 @@ impl NetworkInterface {
 ///
 /// - A vector of [`NetworkInterface`] containing network data consumption.
 /// - An error when no valid network interface found.
-fn collect_interface_data() -> Result<Vec<NetworkInterface>, Box<dyn Error>> {
+fn collect_net_data() -> Result<Vec<NetworkInterface>, Box<dyn Error>> {
     let mut networks = Networks::new_with_refreshed_list();
     sleep(Duration::from_millis(10)); // Waiting a bit to get data from network
     networks.refresh(true); // Refreshing again to generate diff
@@ -100,9 +101,9 @@ fn collect_interface_data() -> Result<Vec<NetworkInterface>, Box<dyn Error>> {
 }
 
 /// Public function used to send JSON formatted values,
-/// from [`collect_interface_data`] function result.
+/// from [`collect_net_data`] function result.
 pub fn get_net_info() -> Result<(), Box<dyn Error>> {
-    let interfaces = collect_interface_data()?;
+    let interfaces = collect_net_data()?;
     let data: HashMap<_, _> = interfaces
         .into_iter()
         .map(|iface| (iface.name.clone(), iface.to_json()))

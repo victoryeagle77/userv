@@ -1,27 +1,14 @@
-//! # Motherboard data Module
+//! # Lib file for board data module
 //!
-//! This module provides functionality to retrieve motherboard and bios data on Unix-based systems.
+//! This module provides functionalities to retrieve motherboard / main board and bios data on Unix-based systems.
 
 use log::error;
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::{collections::HashMap, error::Error, fs::read_to_string};
+use std::error::Error;
 
-use crate::utils::write_json_to_file;
-
-const HEADER: &str = "BOARD";
-const LOGGER: &str = "log/board_data.json";
-
-const BOARD_FILES: [&str; 8] = [
-    "/sys/class/dmi/id/board_name",
-    "/sys/class/dmi/id/board_serial",
-    "/sys/class/dmi/id/board_version",
-    "/sys/class/dmi/id/board_vendor",
-    "/sys/class/dmi/id/bios_date",
-    "/sys/class/dmi/id/bios_release",
-    "/sys/class/dmi/id/bios_vendor",
-    "/sys/class/dmi/id/bios_version",
-];
+mod utils;
+use utils::*;
 
 /// Collection of collected motherboard data.
 #[derive(Debug, Serialize)]
@@ -86,28 +73,6 @@ impl BoardInfo {
     }
 }
 
-/// Retrieves data of the main motherboard.
-/// This function uses the `dmi` directory to gather motherboard information.
-///
-/// # Returns
-///
-/// - `data`: Each element found for motherboard info.
-fn read_dmi_data() -> HashMap<String, String> {
-    let mut data = HashMap::new();
-    for &path in BOARD_FILES.iter() {
-        match read_to_string(path) {
-            Ok(content) => {
-                let key = path.rsplit('/').next().unwrap_or_default();
-                data.insert(key.to_string(), content.trim().to_string());
-            }
-            Err(e) => {
-                error!("[{HEADER}] Data 'Failed to read DMI file' {path} : {e}");
-            }
-        }
-    }
-    data
-}
-
 /// Retrieves information about the motherboard of an IT equipment.
 ///
 /// # Returns
@@ -158,7 +123,7 @@ fn collect_board_data() -> Result<BoardInfo, Box<dyn Error>> {
 }
 
 /// Public function used to send JSON formatted values,
-/// from [`collect_motherboard_data`] function result.
+/// from [`collect_board_data`] function result.
 pub fn get_board_info() -> Result<(), Box<dyn Error>> {
     let data = collect_board_data()?;
     let values = json!({ HEADER: data.to_json() });

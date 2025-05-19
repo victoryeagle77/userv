@@ -1,65 +1,23 @@
-//! # CPU data Module
-//!
-//! This module provides functionality to retrieve processor data on Unix-based systems.
+//! # File utilities module
 
+use chrono::{SecondsFormat::Millis, Utc};
 use log::error;
-use serde::Serialize;
 use serde_json::{json, Value};
 use std::{
     error::Error,
+    fs::OpenOptions,
     fs::{read_dir, read_to_string},
+    io::Write,
     path::Path,
     thread::sleep,
     time::{Duration, Instant},
 };
-use sysinfo::{Components, Cpu, CpuRefreshKind, RefreshKind, System};
+use sysinfo::{Components, Cpu};
 
-use crate::utils::write_json_to_file;
+pub const HEADER: &'static str = "CPU";
+pub const LOGGER: &'static str = "log/cpu_data.json";
 
-const RAPL: &str = "/sys/class/powercap";
-
-const HEADER: &str = "CPU";
-const LOGGER: &str = "log/cpu_data.json";
-
-/// Collection of collected CPU data
-#[derive(Debug, Serialize)]
-struct CpuInfo {
-    /// CPU architecture label
-    architecture: Option<String>,
-    /// CPU model name.
-    model: Option<String>,
-    /// CPU generation.
-    family: Option<String>,
-    /// CPU operating frequency in Mhz.
-    frequency: Option<String>,
-    /// Physical CPU cores.
-    cores_physic: Option<usize>,
-    /// Logical CPU cores.
-    cores_logic: Option<usize>,
-    /// CPU usage cores in percentage.
-    cores_usage: Option<Vec<(String, f32)>>,
-    /// CPU temperatures by zone in °C.
-    temperature: Option<Vec<(String, f32)>>,
-    /// CPU energy consumption by zone in uJ.
-    power: Option<Vec<(String, f64)>>,
-}
-
-impl CpuInfo {
-    /// Converts the [`CpuInfo`] structure into a JSON value.
-    fn to_json(&self) -> Value {
-        json!({
-            "architectrue": self.architecture,
-            "cores_physical": self.cores_physic,
-            "cores_logical": self.cores_logic,
-            "core_usage_%": self.cores_usage,
-            "family": self.family,
-            "frequency_MHz": self.frequency,
-            "model": self.model,
-            "power_consumption_W": self.power,
-            "temperatures_°C": self.temperature,
-        })
-    }
-}
+const RAPL: &'static str = "/sys/class/powercap";
 
 /// Retrieves the current CPU usage by cores.
 /// This function uses the `sysinfo` crate to gather CPU usage information.
@@ -75,7 +33,7 @@ impl CpuInfo {
 ///
 /// This function introduces a [`sysinfo::MINIMUM_CPU_UPDATE_INTERVAL`] delay due to the sleep between CPU usage snapshots.
 /// This delay is necessary to calculate an accurate usage percentage.
-fn get_cpu_usage(cpus: &[Cpu]) -> Result<Vec<(String, f32)>, Box<dyn Error>> {
+pub fn get_cpu_usage(cpus: &[Cpu]) -> Result<Vec<(String, f32)>, Box<dyn Error>> {
     let result = cpus
         .iter()
         .enumerate()
@@ -106,7 +64,7 @@ fn get_cpu_usage(cpus: &[Cpu]) -> Result<Vec<(String, f32)>, Box<dyn Error>> {
 ///
 /// - `result` : Vector where each element represents cores and its thermal state in Celsius.
 /// - An error if CPU thermal data are not found.
-fn get_cpu_temperature() -> Result<Vec<(String, f32)>, Box<dyn Error>> {
+pub fn get_cpu_temperature() -> Result<Vec<(String, f32)>, Box<dyn Error>> {
     let components = Components::new_with_refreshed_list();
 
     let result = components
@@ -143,7 +101,7 @@ fn get_cpu_temperature() -> Result<Vec<(String, f32)>, Box<dyn Error>> {
 ///
 /// - `result` : Vector containing CPU zone name and its consumption.
 /// - An empty vector if no energy consumption file or data are found.
-fn get_rapl_consumption() -> Option<Vec<(String, f64)>> {
+pub fn get_rapl_consumption() -> Option<Vec<(String, f64)>> {
     /// Read in RAPL the energy in RAPL domain folder.
     ///
     /// # Arguments
@@ -197,57 +155,48 @@ fn get_rapl_consumption() -> Option<Vec<(String, f64)>> {
     }
 }
 
-/// Public function reading and using `/proc/cpuinfo` file values,
-/// and retrieves detailed CPU data.
+/// Writes JSON formatted data in a file
+///
+/// # Arguments
+///
+/// * `data` : JSON serialized collected metrics data to write
+/// * `path` : File path use to writing data
 ///
 /// # Return
 ///
-/// - Completed [`CpuInfo`] structure with all retrieved and computing CPU information.
-/// - An error when some important and critical metrics can't be retrieved.
-fn collect_cpu_data() -> Result<CpuInfo, Box<dyn Error>> {
-    let mut sys =
-        System::new_with_specifics(RefreshKind::nothing().with_cpu(CpuRefreshKind::everything()));
-    // Wait a bit because CPU usage is based on diff.
-    sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
-    // Refresh CPUs again to get actual value.
-    sys.refresh_cpu_all();
+/// - Custom error message if an error occurs during JSON data serialization or file handling.
+pub fn write_json_to_file<F>(generator: F, path: &'static str) -> Result<(), Box<dyn Error>>
+where
+    F: FnOnce() -> Result<Value, Box<dyn Error>>,
+{
+    let mut data: Value = generator()?;
 
-    let cpus = sys.cpus();
-    if cpus.is_empty() {
-        return Err("Failed to get global CPUs information".to_string().into());
+    // Timestamp implementation in JSON object
+    let timestamp = Some(Utc::now().to_rfc3339_opts(Millis, true));
+
+    // Format data to JSON object
+    if data.is_object() {
+        data.as_object_mut()
+            .unwrap()
+            .insert("timestamp".to_owned(), json!(timestamp));
+    } else if data.is_array() {
+        for item in data.as_array_mut().unwrap() {
+            if item.is_object() {
+                item.as_object_mut()
+                    .unwrap()
+                    .insert("timestamp".to_owned(), json!(timestamp));
+            }
+        }
     }
 
-    let cores_physic = System::physical_core_count();
-    let cores_logic = Some(cpus.len());
+    let mut file = OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .create(true)
+        .open(path)?;
+    let log = serde_json::to_string_pretty(&data)?;
 
-    let architecture = Some(System::cpu_arch());
-    let model = cpus.first().map(|c| c.brand().to_string());
-    let family = cpus.first().map(|c| c.vendor_id().to_string());
-    let frequency = cpus.first().map(|c| c.frequency().to_string());
+    file.write_all(log.as_bytes())?;
 
-    let cores_usage = Some(get_cpu_usage(cpus)?);
-    let temperature = Some(get_cpu_temperature()?);
-
-    let power = get_rapl_consumption();
-
-    Ok(CpuInfo {
-        architecture,
-        cores_physic,
-        cores_logic,
-        cores_usage,
-        family,
-        frequency,
-        model,
-        power,
-        temperature,
-    })
-}
-
-/// Public function used to send JSON formatted values,
-/// from [`collect_cpu_data`] function result.
-pub fn get_cpu_info() -> Result<(), Box<dyn Error>> {
-    let data = collect_cpu_data()?;
-    let values = json!({ HEADER: data.to_json() });
-    write_json_to_file(|| Ok(values), LOGGER)?;
     Ok(())
 }

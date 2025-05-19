@@ -1,6 +1,6 @@
-//! # System Load data Module
+//! # Lib file for system data module
 //!
-//! This module provides functionality to retrieve system load data on Unix-based systems.
+//! This module provides functionality to retrieve operating system data on Unix-based systems.
 
 use log::error;
 use serde::Serialize;
@@ -8,12 +8,8 @@ use serde_json::{json, Value};
 use std::{error::Error, thread};
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
-use crate::utils::write_json_to_file;
-
-const FACTOR: u64 = 1_000_000;
-
-const HEADER: &str = "SYSTEM";
-const LOGGER: &str = "log/system_data.json";
+mod utils;
+use utils::*;
 
 /// Collection of process data.
 #[derive(Debug, Serialize)]

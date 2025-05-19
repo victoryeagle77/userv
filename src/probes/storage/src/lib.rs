@@ -1,6 +1,6 @@
-//! # Disk Data Module
+//! # Lib file for storage data module
 //!
-//! This module provides functionality to retrieve disk data on Unix-based systems.
+//! This module provides functionalities to retrieve storage data on Unix-based systems.
 
 use libc::{c_void, close, open, read};
 use log::error;
@@ -10,10 +10,8 @@ use serde_json::{json, Value};
 use std::{error::Error, ffi::CString};
 use sysinfo::{Disk, DiskRefreshKind, Disks};
 
-use crate::utils::write_json_to_file;
-
-const HEADER: &str = "STORAGE";
-const LOGGER: &str = "log/storage_data.json";
+mod utils;
+use utils::*;
 
 /// Collected more specific and detailed disk data.
 #[derive(Debug, Serialize)]
@@ -212,7 +210,7 @@ impl DiskInfo {
 /// The compilation of completed structures concerning all disk information.
 /// * [`DiskInfo`] concerning global system info of the device storage.
 /// * [`SmartInfo`] concerning smart info for the device storage if it's possible.
-fn collect_disk_data() -> Result<Vec<Value>, Box<dyn Error>> {
+fn collect_storage_data() -> Result<Vec<Value>, Box<dyn Error>> {
     let disks = Disks::new_with_refreshed_list_specifics(DiskRefreshKind::everything());
     let mut result = Vec::new();
 
@@ -227,9 +225,9 @@ fn collect_disk_data() -> Result<Vec<Value>, Box<dyn Error>> {
 }
 
 /// Public function used to send JSON formatted values,
-/// from [`collect_disk_data`] function result.
-pub fn get_disk_info() -> Result<(), Box<dyn Error>> {
-    let data = collect_disk_data()?;
+/// from [`collect_storage_data`] function result.
+pub fn get_storage_info() -> Result<(), Box<dyn Error>> {
+    let data = collect_storage_data()?;
     let values = json!({ HEADER: data });
     write_json_to_file(|| Ok(values), LOGGER)?;
     Ok(())

@@ -1,41 +1,18 @@
-use clap::{Parser, ValueEnum};
+//! # Main File
+//!
+//! This file provides call the necessary to handle each probe,
+//! separately or simultaneously in threaded tasks.
+
+use clap::Parser;
 use log::error;
-use probes::{
-    board_info::get_board_info, cpu_info::get_cpu_info, gpu_info::get_gpu_info,
-    net_info::get_net_info, storage_info::get_disk_info, system_info::get_system_info,
-};
 use std::{
     process::exit,
     thread::{sleep, spawn},
     time::Duration,
 };
 
-use ram::get_ram_info;
-use utils::init_logger;
-
-mod probes;
 mod utils;
-
-const HEADER: &str = "MAIN";
-
-/// Enumeration of available arguments corresponding to a component
-#[derive(Debug, Clone, ValueEnum)]
-enum Component {
-    /// Motherboard or principal system board probe data.
-    Board,
-    /// CPU probe data.
-    Cpu,
-    /// GPU device probe data.
-    Gpu,
-    /// Network probe data.
-    Net,
-    /// Computing and SWAP memory probe data.
-    Ram,
-    /// Storage device probe data.
-    Storage,
-    /// Operating system probe data.
-    System,
-}
+use utils::*;
 
 /// Data defining arguments to active or not a probe to retrieve component data.
 #[derive(Parser, Debug)]
@@ -49,71 +26,6 @@ struct Arg {
     /// Interval in seconds between each probe run. If not set, probes run once.
     #[arg(long, default_value_t = 0)]
     freq: u64,
-}
-
-/// Parameters of probe that analyzing and retrieves data about a component.
-struct Probe {
-    /// Identification header for information loggers about a probe.
-    label: &'static str,
-    /// Function concerning data retrieves by a probe.
-    func: fn() -> Result<(), Box<dyn std::error::Error>>,
-}
-
-impl Probe {
-    /// Define the probe and the label associated to a component,
-    /// and check if it is selected.
-    ///
-    /// # Arguments
-    ///
-    /// - `component` : The component that we want retrieves data.
-    ///
-    /// # Returns
-    ///
-    /// The selected component via [`Probe`] information.
-    fn get_probe(component: &Component) -> Probe {
-        match component {
-            Component::Board => Probe {
-                label: "MOTHERBOARD",
-                func: get_board_info,
-            },
-            Component::Cpu => Probe {
-                label: "CPU",
-                func: get_cpu_info,
-            },
-            Component::Gpu => Probe {
-                label: "GPU",
-                func: get_gpu_info,
-            },
-            Component::Net => Probe {
-                label: "NETWORK",
-                func: get_net_info,
-            },
-            Component::Ram => Probe {
-                label: "RAM",
-                func: get_ram_info,
-            },
-            Component::Storage => Probe {
-                label: "STORAGE",
-                func: get_disk_info,
-            },
-            Component::System => Probe {
-                label: "SYSTEM",
-                func: get_system_info,
-            },
-        }
-    }
-
-    /// Run a probe to retrieve information about a component.
-    /// If component's data can't be retrieved, we log the error returned.
-    ///
-    /// # Arguments
-    ///
-    /// - `probe` : Concerning component with [`Probe`].
-    fn run_probe(probe: Probe) {
-        if let Err(e) = (probe.func)() {
-            error!("[{}] {e}", probe.label);
-        }
-    }
 }
 
 /// Main function of `userv` program that run in threading tasks each probes
@@ -141,7 +53,7 @@ fn main() {
             Component::Cpu,
             Component::Gpu,
             Component::Net,
-            Component::Ram,
+            Component::Memory,
             Component::Storage,
             Component::System,
         ]

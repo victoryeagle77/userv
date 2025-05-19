@@ -1,6 +1,6 @@
 //! # File utilities module
 //!
-//! This module provides functionalities to get specific data concerning RAM and SWAP memories on Unix-based systems.
+//! This module provides functionalities to get specific data concerning memories on Unix-based systems.
 
 use chrono::{SecondsFormat::Millis, Utc};
 use log::error;
@@ -14,13 +14,14 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub const HEADER: &'static str = "RAM";
-pub const LOGGER: &'static str = "log/ram_data.json";
+pub const HEADER: &'static str = "MEMORY";
+pub const LOGGER: &'static str = "log/mem_data.json";
 
 const ARRAY_SIZE: &'static usize = &1_000_000_000;
 pub const FACTOR: &'static u64 = &1_000_000;
 
-/// Typical power consumption per GB for each RAM type, based on voltage specifications and average module datasheets.
+/// Typical power consumption per GB for each memory type,
+/// based on voltage specifications and average module datasheets.
 ///
 /// # Sources
 ///
@@ -53,7 +54,7 @@ pub const FACTOR: &'static u64 = &1_000_000;
 /// | LPDDR4   | 1.1V      | 1–1.5W          | 0.16 |
 /// | LPDDR5   | 1.05V     | 0.8–1.2W        | 0.12 |
 /// | eMMC     | 3.3V/1.8V | < 0.8W          | 0.10 |
-pub const RAM_TYPE_POWER: &[(&str, f64)] = &[
+pub const RAM_TYPE_POWER: &[(&'static str, f64)] = &[
     ("SDRAM", 0.70),
     ("DDR", 0.60),
     ("DDR2", 0.48),
@@ -67,14 +68,14 @@ pub const RAM_TYPE_POWER: &[(&str, f64)] = &[
     ("eMMC", 0.10),
 ];
 
-/// Function that calculates the writing and reading speed of RAM,
+/// Function that calculates the writing and reading speed of computing memory,
 /// allocating a wide range [`ARRAY_SIZE`] of test data in memory.
 ///
 /// # Return
 ///
 /// - `write_bandwidth` : Write bandwidth test result in MB/s.
 /// - `read_bandwidth` : Read bandwidth test result in MB/s.
-pub fn get_ram_test() -> Result<(Option<f64>, Option<f64>), Box<dyn Error>> {
+pub fn get_mem_test() -> Result<(Option<f64>, Option<f64>), Box<dyn Error>> {
     let mut space_area = vec![0u8; *ARRAY_SIZE];
 
     let write_start = Instant::now();
@@ -119,7 +120,7 @@ pub fn get_ram_test() -> Result<(Option<f64>, Option<f64>), Box<dyn Error>> {
 /// # Operating
 ///
 /// Root privileges are required.
-pub fn get_ram_types() -> Result<Option<Vec<String>>, Box<dyn Error>> {
+pub fn get_mem_types() -> Result<Option<Vec<String>>, Box<dyn Error>> {
     let output = Command::new("dmidecode").args(["-t", "memory"]).output()?;
 
     if !output.status.success() {
@@ -154,14 +155,14 @@ pub fn get_ram_types() -> Result<Option<Vec<String>>, Box<dyn Error>> {
     }
 }
 
-/// Estimation of power consumption by RAM in W.
-/// Base on the typical power consumption per GB based on the RAM type defined in [`RAM_TYPE_POWER`].
+/// Estimation of power consumption by memory in W.
+/// Base on the typical power consumption per GB based on the memory type defined in [`RAM_TYPE_POWER`].
 ///
 /// # Returns
 ///
 /// - Returns the estimated RAM power consumption in W.
-/// - None if RAM type is unknown or total RAM is zero.
-pub fn ram_power_consumption(ram_total: u64, ram_used: u64, ram_type: &str) -> Option<f64> {
+/// - None if memory type is unknown or total memory is zero.
+pub fn mem_power_consumption(ram_total: u64, ram_used: u64, ram_type: &str) -> Option<f64> {
     let power = RAM_TYPE_POWER
         .iter()
         .find(|&&(t, _)| t == ram_type)

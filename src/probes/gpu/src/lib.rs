@@ -1,11 +1,9 @@
-//! # GPU data Module
+//! # Lib file for GPU data module
 //!
-//! This module provides functionality to retrieve GPU data on Unix-based systems.
+//! This module provides functionalities to retrieve GPU data on Unix-based systems.
 
-use log::error;
 use nvml_wrapper::{
     enum_wrappers::device::{Clock, ClockId, PcieUtilCounter, TemperatureSensor},
-    error::NvmlError,
     struct_wrappers::device::ProcessUtilizationSample,
     Device, Nvml,
 };
@@ -13,24 +11,8 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use std::error::Error;
 
-use crate::utils::write_json_to_file;
-
-const HEADER: &str = "GPU";
-const LOGGER: &str = "log/gpu_data.json";
-
-/// Helper for NVML error handling.
-fn nvml_try<T, F>(context: &'static str, f: F) -> Result<T, NvmlError>
-where
-    F: FnOnce() -> Result<T, NvmlError>,
-{
-    match f() {
-        Ok(val) => Ok(val),
-        Err(e) => {
-            error!("[{HEADER}] Data '{context}' : {e}");
-            Err(e)
-        }
-    }
-}
+mod utils;
+use utils::*;
 
 // Collection of collected GPU data.
 #[derive(Serialize)]
@@ -271,7 +253,7 @@ impl GpuProcessMetrics {
 }
 
 /// Collect all GPU process metric for a given device.
-fn collect_processes(device: &Device) -> Vec<Value> {
+fn collect_gpu_processes(device: &Device) -> Vec<Value> {
     let mut processes = Vec::new();
     if let Ok(utilization_stats) = nvml_try("Failed to get process utilization", || {
         device.process_utilization_stats(None)
@@ -303,7 +285,7 @@ fn collect_gpus_data() -> Result<Vec<Value>, Box<dyn Error>> {
         result.push(json!({
             key: {
                 "device": GpuMetrics::from_device(&device).to_json(),
-                "process": collect_processes(&device),
+                "process": collect_gpu_processes(&device),
             }
         }));
     }
