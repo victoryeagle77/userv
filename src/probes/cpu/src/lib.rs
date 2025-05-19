@@ -2,53 +2,48 @@
 //!
 //! This module provides functionalities to retrieve processor data on Unix-based systems.
 
-use serde::Serialize;
-use serde_json::{json, Value};
+use chrono::{SecondsFormat, Utc};
 use std::{error::Error, thread::sleep};
 use sysinfo::{CpuRefreshKind, RefreshKind, System};
 
 mod utils;
 use crate::utils::*;
 
-/// Collection of collected CPU data
-#[derive(Debug, Serialize)]
-struct CpuInfo {
-    /// CPU architecture label
-    architecture: Option<String>,
-    /// CPU model name.
-    model: Option<String>,
-    /// CPU generation.
-    family: Option<String>,
-    /// CPU operating frequency in Mhz.
-    frequency: Option<String>,
-    /// Physical CPU cores.
-    cores_physic: Option<usize>,
-    /// Logical CPU cores.
-    cores_logic: Option<usize>,
-    /// CPU usage cores in percentage.
-    cores_usage: Option<Vec<(String, f32)>>,
-    /// CPU temperatures by zone in °C.
-    temperature: Option<Vec<(String, f32)>>,
-    /// CPU energy consumption by zone in uJ.
-    power: Option<Vec<(String, f64)>>,
-}
+use core::core::init_db;
 
-impl CpuInfo {
-    /// Converts the [`CpuInfo`] structure into a JSON value.
-    fn to_json(&self) -> Value {
-        json!({
-            "architectrue": self.architecture,
-            "cores_physical": self.cores_physic,
-            "cores_logical": self.cores_logic,
-            "core_usage_%": self.cores_usage,
-            "family": self.family,
-            "frequency_MHz": self.frequency,
-            "model": self.model,
-            "power_consumption_W": self.power,
-            "temperatures_°C": self.temperature,
-        })
-    }
-}
+const REQUEST: &'static str = "
+    CREATE TABLE IF NOT EXISTS cpu_data (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT NOT NULL,
+        architecture TEXT,
+        model TEXT,
+        family TEXT,
+        frequency_MHz TEXT,
+        cores_physic INTEGER,
+        cores_logic INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS core (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        indexation INTEGER,
+        core_name TEXT,
+        usage_percent REAL,
+        FOREIGN KEY(indexation) REFERENCES cpu_data(id)
+    );
+    CREATE TABLE IF NOT EXISTS temperature (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        indexation INTEGER,
+        zone_name TEXT,
+        temperature_C REAL,
+        FOREIGN KEY(indexation) REFERENCES cpu_data(id)
+    );
+    CREATE TABLE IF NOT EXISTS power (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        indexation INTEGER,
+        zone_name TEXT,
+        power_W REAL,
+        FOREIGN KEY(indexation) REFERENCES cpu_data(id)
+    );
+    ";
 
 /// Public function reading and using `/proc/cpuinfo` file values,
 /// and retrieves detailed CPU data.
@@ -96,11 +91,12 @@ fn collect_cpu_data() -> Result<CpuInfo, Box<dyn Error>> {
     })
 }
 
-/// Public function used to send JSON formatted values,
+/// Public function used to send values in SQLite database,
 /// from [`collect_cpu_data`] function result.
 pub fn get_cpu_info() -> Result<(), Box<dyn Error>> {
+    let mut conn = init_db(REQUEST)?;
+    let timestamp = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
     let data = collect_cpu_data()?;
-    let values = json!({ HEADER: data.to_json() });
-    write_json_to_file(|| Ok(values), LOGGER)?;
+    CpuInfo::insert_db(&mut conn, &timestamp, &data)?;
     Ok(())
 }

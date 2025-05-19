@@ -22,3 +22,5 @@ memory = { path = "src/probes/memory" }
 network = { path = "src/probes/network" }
 storage = { path = "src/probes/storage" }
 system = { path = "src/probes/system" }
+
+gui_web = { path = "src/gui/web" }
