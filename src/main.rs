@@ -13,6 +13,7 @@ use std::{
 
 mod utils;
 use utils::*;
+//use gui_web::web;
 
 /// Data defining arguments to active or not a probe to retrieve component data.
 #[derive(Parser, Debug)]
@@ -89,4 +90,6 @@ fn main() {
             sleep(Duration::from_secs(arg.freq));
         }
     }
+
+    //web();
 }

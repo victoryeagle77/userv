@@ -1,23 +1,119 @@
 //! # File utilities module
 
-use chrono::{SecondsFormat::Millis, Utc};
 use log::error;
-use serde_json::{json, Value};
+use rusqlite::{Connection, params};
+use serde::Serialize;
 use std::{
     error::Error,
-    fs::OpenOptions,
     fs::{read_dir, read_to_string},
-    io::Write,
     path::Path,
-    thread::sleep,
-    time::{Duration, Instant},
+    time::Duration,
 };
 use sysinfo::{Components, Cpu};
 
-pub const HEADER: &'static str = "CPU";
-pub const LOGGER: &'static str = "log/cpu_data.json";
+use core::core::measure_point;
 
-const RAPL: &'static str = "/sys/class/powercap";
+const HEADER: &str = "CPU";
+const RAPL: &str = "/sys/class/powercap";
+
+/// Collection of collected CPU data
+#[derive(Debug, Serialize)]
+pub struct CpuInfo {
+    /// CPU architecture label
+    pub architecture: Option<String>,
+    /// CPU model name.
+    pub model: Option<String>,
+    /// CPU generation.
+    pub family: Option<String>,
+    /// CPU operating frequency in Mhz.
+    pub frequency: Option<String>,
+    /// Physical CPU cores.
+    pub cores_physic: Option<usize>,
+    /// Logical CPU cores.
+    pub cores_logic: Option<usize>,
+    /// CPU usage cores in percentage.
+    pub cores_usage: Option<Vec<(String, f32)>>,
+    /// CPU temperatures by zone in °C.
+    pub temperature: Option<Vec<(String, f32)>>,
+    /// CPU energy consumption by zone in uJ.
+    pub power: Option<Vec<(String, f64)>>,
+}
+
+impl CpuInfo {
+    /// Insert CPU parameters into the database.
+    ///
+    /// # Arguments
+    ///
+    /// - `timestamp` : Date trace to history identification.
+    /// - `conn` : Allow by a [`Connection`] constructor type the connection with an SQLite database.
+    /// - `data` : [`CpuInfo`] information to insert in database.
+    ///
+    /// # Returns
+    ///
+    /// - Insert the [`CpuInfo`] filled structure in an SQLite database.
+    /// - Logs an error if the SQL insert request failed.
+    pub fn insert_db(
+        conn: &Connection,
+        timestamp: &str,
+        data: &Self,
+    ) -> Result<(), Box<dyn Error>> {
+        // Insert main table
+        conn.execute(
+            "INSERT INTO cpu_data (
+                timestamp,
+                architecture,
+                model,
+                family,
+                frequency_MHz,
+                cores_physic,
+                cores_logic
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                timestamp,
+                data.architecture,
+                data.model,
+                data.family,
+                data.frequency,
+                data.cores_physic,
+                data.cores_logic,
+            ],
+        )?;
+
+        let id = conn.last_insert_rowid();
+
+        // Insert secondary table "core"
+        if let Some(cores) = &data.cores_usage {
+            for (core_name, core) in cores {
+                conn.execute(
+                    "INSERT INTO core (indexation, core_name, usage_percent) VALUES (?1, ?2, ?3)",
+                    params![id, core_name, core],
+                )?;
+            }
+        }
+
+        // Insert secondary table "temperature"
+        if let Some(temps) = &data.temperature {
+            for (zone_name, temp) in temps {
+                conn.execute(
+                    "INSERT INTO temperature (indexation, zone_name, temperature_C) VALUES (?1, ?2, ?3)",
+                    params![id, zone_name, temp],
+                )?;
+            }
+        }
+
+        // Insert secondary table "power"
+        if let Some(powers) = &data.power {
+            for (zone_name, power) in powers {
+                conn.execute(
+                    "INSERT INTO power (indexation, zone_name, power_W) VALUES (?1, ?2, ?3)",
+                    params![id, zone_name, power],
+                )?;
+            }
+        }
+
+        Ok(())
+    }
+}
 
 /// Retrieves the current CPU usage by cores.
 /// This function uses the `sysinfo` crate to gather CPU usage information.
@@ -94,38 +190,29 @@ pub fn get_cpu_temperature() -> Result<Vec<(String, f32)>, Box<dyn Error>> {
     }
 }
 
+/// Read in RAPL the energy in RAPL domain folder and extract the value in uJ.
+///
+/// # Arguments
+///
+/// - `path` : Files in RAPL folder domain.
+///
+/// # Returns
+///
+/// - `energy` : The energy information in microJoules in RAPL domain folder.
+/// - An error when we can't to retrieve properly the energy data.
+fn read_rapl(path: &Path) -> Option<f64> {
+    let content = read_to_string(path).ok()?;
+    content.trim().parse::<f64>().ok()
+}
+
 /// Reading in RAPL directory `/sys/class/powercap/`,
 /// to get consumption data in locate each CPU zone to get specific energy consumption.
 ///
 /// # Return
 ///
-/// - `result` : Vector containing CPU zone name and its consumption.
+/// - `result` : Vector containing CPU zone name and its consumption in J.
 /// - An empty vector if no energy consumption file or data are found.
 pub fn get_rapl_consumption() -> Option<Vec<(String, f64)>> {
-    /// Read in RAPL the energy in RAPL domain folder.
-    ///
-    /// # Arguments
-    ///
-    /// - `path` : Files in RAPL folder domain.
-    ///
-    /// # Returns
-    ///
-    /// - `energy` : The energy information in microJoules in RAPL domain folder.
-    /// - An error when we can't to retrieve properly the energy data.
-    fn read_rapl(path: &Path) -> Option<f64> {
-        let content = read_to_string(path).ok()?;
-        content.trim().parse::<f64>().ok()
-    }
-
-    fn measure_power(_domain: &str, energy_path: &Path) -> Option<f64> {
-        let start_energy = read_rapl(energy_path)?;
-        let start_time = Instant::now();
-        sleep(Duration::from_secs(1));
-        let end_energy = read_rapl(energy_path)?;
-        let elapsed = start_time.elapsed().as_secs_f64();
-        Some((end_energy - start_energy) / (elapsed * 1e6))
-    }
-
     let entries = read_dir(RAPL).ok()?;
 
     let result: Vec<(String, f64)> = entries
@@ -136,14 +223,11 @@ pub fn get_rapl_consumption() -> Option<Vec<(String, f64)>> {
             if !path.is_dir() || !domain.starts_with("intel-rapl:") {
                 return None;
             }
-            let energy_path = path.join("energy_uj");
-            match measure_power(domain, &energy_path) {
-                Some(power) => Some((domain.to_string(), power)),
-                None => {
-                    error!("[{HEADER}] Folder 'Failed to read RAPL domain' : {domain}");
-                    None
-                }
-            }
+            let power = measure_point(
+                || read_rapl(&path.join("energy_uj")),
+                Duration::from_millis(10),
+            )?;
+            Some((domain.to_string(), power / 1e6))
         })
         .collect();
 
@@ -153,50 +237,4 @@ pub fn get_rapl_consumption() -> Option<Vec<(String, f64)>> {
     } else {
         Some(result)
     }
-}
-
-/// Writes JSON formatted data in a file
-///
-/// # Arguments
-///
-/// * `data` : JSON serialized collected metrics data to write
-/// * `path` : File path use to writing data
-///
-/// # Return
-///
-/// - Custom error message if an error occurs during JSON data serialization or file handling.
-pub fn write_json_to_file<F>(generator: F, path: &'static str) -> Result<(), Box<dyn Error>>
-where
-    F: FnOnce() -> Result<Value, Box<dyn Error>>,
-{
-    let mut data: Value = generator()?;
-
-    // Timestamp implementation in JSON object
-    let timestamp = Some(Utc::now().to_rfc3339_opts(Millis, true));
-
-    // Format data to JSON object
-    if data.is_object() {
-        data.as_object_mut()
-            .unwrap()
-            .insert("timestamp".to_owned(), json!(timestamp));
-    } else if data.is_array() {
-        for item in data.as_array_mut().unwrap() {
-            if item.is_object() {
-                item.as_object_mut()
-                    .unwrap()
-                    .insert("timestamp".to_owned(), json!(timestamp));
-            }
-        }
-    }
-
-    let mut file = OpenOptions::new()
-        .write(true)
-        .truncate(true)
-        .create(true)
-        .open(path)?;
-    let log = serde_json::to_string_pretty(&data)?;
-
-    file.write_all(log.as_bytes())?;
-
-    Ok(())
 }
