@@ -1,0 +1,8 @@
+[package]
+name = "core"
+version = "0.1.0"
+edition = "2021"
+description = "Core files providing utilities functions"
+
+[dependencies]
+rusqlite = "0.36"
