@@ -13,21 +13,27 @@ use utils::*;
 /// Collection of network data consumption.
 #[derive(Debug, Serialize)]
 struct NetworkInterface {
+    /// Interface Mac address.
     address_mac: Option<String>,
+    average_power: Option<f64>,
+    /// Estimation of consumed energy according consumed data in Wh.
+    estimated_energy: Option<f64>,
     /// Name of network interface.
     name: String,
+    /// Type of network.
+    network_type: NetworkType,
     /// Received network packages in MB.
-    received: Option<u64>,
+    received: Option<f64>,
     /// Transmitted network packages in MB.
-    transmitted: Option<u64>,
+    transmitted: Option<f64>,
     /// Network errors received in MB.
-    errors_received: Option<u64>,
+    errors_received: Option<f64>,
     /// Network errors transmitted in MB.
-    errors_transmitted: Option<u64>,
+    errors_transmitted: Option<f64>,
     /// Number of incoming packets in MB.
-    packet_received: Option<u64>,
-    /// Number of outcoming packets in MB.
-    packet_transmitted: Option<u64>,
+    packet_received: Option<f64>,
+    /// Number of outcome packets in MB.
+    packet_transmitted: Option<f64>,
 }
 
 impl NetworkInterface {
@@ -38,33 +44,49 @@ impl NetworkInterface {
     /// - `name` : Name of the network interface used
     /// - `network` : Corresponding network data to the network interface.
     fn from_interface(name: &str, network: &NetworkData) -> Self {
+        let received = network.total_received() as f64 / FACTOR;
+        let transmitted = network.total_transmitted() as f64 / FACTOR;
+        let packet_received = network.total_packets_received() as f64 / FACTOR;
+        let packet_transmitted = network.total_packets_transmitted() as f64 / FACTOR;
+
+        let network_type = guess_network_type(name);
+        let ratio = network_type.energy_ratio();
+        let idle_power = network_type.idle_power();
+        let traffic_type =
+            guess_traffic_type(received, transmitted, packet_received, packet_transmitted);
+        let traffic_ratio = traffic_type.traffic_ratio();
+
+        let (estimated_energy, average_power) =
+            estimate_network_energy(received, transmitted, ratio, traffic_ratio, idle_power);
+
         NetworkInterface {
             address_mac: Some(network.mac_address().to_string()),
+            average_power: Some(average_power),
+            estimated_energy: Some(estimated_energy),
             name: name.to_string(),
-            received: Some(network.total_received()),
-            transmitted: Some(network.total_transmitted()),
-            errors_received: Some(network.total_errors_on_received()),
-            errors_transmitted: Some(network.total_errors_on_transmitted()),
-            packet_received: Some(network.total_packets_received()),
-            packet_transmitted: Some(network.total_packets_transmitted()),
+            network_type,
+            received: Some(received),
+            transmitted: Some(transmitted),
+            errors_received: Some(network.total_errors_on_received() as f64 / FACTOR),
+            errors_transmitted: Some(network.total_errors_on_transmitted() as f64 / FACTOR),
+            packet_received: Some(packet_received),
+            packet_transmitted: Some(packet_transmitted),
         }
-    }
-
-    /// Convert bytes with a [`FACTOR`] size.
-    fn to_convert(opt: Option<u64>) -> Option<f64> {
-        opt.map(|v| v as f64 / FACTOR)
     }
 
     /// Converts [`NetworkInterface`] into a JSON object with MB values.
     fn to_json(&self) -> Value {
         json!({
             "address_mac": self.address_mac,
-            "received_MB": Self::to_convert(self.received),
-            "transmitted_MB": Self::to_convert(self.transmitted),
-            "errors_received_MB": Self::to_convert(self.errors_received),
-            "errors_transmitted_MB": Self::to_convert(self.errors_transmitted),
-            "packet_received_MB": Self::to_convert(self.packet_received),
-            "packet_transmitted_MB": Self::to_convert(self.packet_transmitted),
+            "average_power_W": self.average_power,
+            "estimated_energy_Wh" : self.estimated_energy,
+            "received_MB": self.received,
+            "transmitted_MB": self.transmitted,
+            "errors_received_MB": self.errors_received,
+            "errors_transmitted_MB": self.errors_transmitted,
+            "packet_received_MB": self.packet_received,
+            "packet_transmitted_MB": self.packet_transmitted,
+            "network_type": self.network_type,
         })
     }
 }

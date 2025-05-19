@@ -22,7 +22,7 @@ struct MemInfo {
     /// Free RAM memory in MB.
     ram_free: Option<u64>,
     /// RAM power consumption according its type in W.
-    ram_power_consumption: Option<Vec<f64>>,
+    ram_power_consumption: Option<f64>,
     /// Total RAM memory in MB.
     ram_total: Option<u64>,
     /// Type of RAM detected.
@@ -78,14 +78,12 @@ fn collect_mem_data() -> Result<MemInfo, Box<dyn Error>> {
     let swap_free = Some(sys.free_swap() / FACTOR);
     let swap_used = Some(sys.used_swap() / FACTOR);
 
-    let types = get_mem_types()?.filter(|data| !data.is_empty());
-    let (ram_types, ram_power_consumption) = match types {
-        Some(ref data) if !data.is_empty() => {
-            let power = data
-                .iter()
-                .filter_map(|data| mem_power_consumption(ram_total, ram_used, data))
-                .collect();
-            (Some(data.clone()), Some(power))
+    let sticks = get_ram_sticks()?.filter(|data| !data.is_empty());
+    let (ram_types, ram_power_consumption) = match sticks {
+        Some(ref sticks) if !sticks.is_empty() => {
+            let types = sticks.iter().map(|s| s.ram_type.clone()).collect();
+            let power = estimated_power_consumption(sticks, ram_used);
+            (Some(types), power)
         }
         _ => (None, None),
     };

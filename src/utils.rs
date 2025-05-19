@@ -16,9 +16,14 @@ use log4rs::{
     append::file::FileAppender,
     config::{Appender, Config, Root},
     encode::pattern::PatternEncoder,
-    filter::threshold::ThresholdFilter, init_config,
+    filter::threshold::ThresholdFilter,
+    init_config,
 };
-use std::{error::Error, fs::{create_dir_all, write}, path::Path};
+use std::{
+    error::Error,
+    fs::{create_dir_all, write},
+    path::Path,
+};
 
 const LOGGER: &str = "log/error.log";
 pub const HEADER: &str = "MAIN";

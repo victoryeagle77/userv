@@ -13,14 +13,6 @@ use utils::*;
 /// Collection of collected motherboard data.
 #[derive(Debug, Serialize)]
 struct BoardInfo {
-    /// Main board (or motherboard) full name.
-    board_name: Option<String>,
-    /// Main board (or motherboard) serial number.
-    board_serial: Option<String>,
-    /// Main board (or motherboard) hardware version.
-    board_version: Option<String>,
-    /// Main board (or motherboard) vendor name.
-    board_vendor: Option<String>,
     /// BIOS release date.
     bios_date: Option<String>,
     /// BIOS release version.
@@ -29,20 +21,28 @@ struct BoardInfo {
     bios_version: Option<String>,
     /// BIOS vendor name.
     bios_vendor: Option<String>,
+    /// Main board (or motherboard) full name.
+    board_name: Option<String>,
+    /// Main board (or motherboard) serial number.
+    board_serial: Option<String>,
+    /// Main board (or motherboard) hardware version.
+    board_version: Option<String>,
+    /// Main board (or motherboard) vendor name.
+    board_vendor: Option<String>,
 }
 
 impl BoardInfo {
     /// Converts [`BoardInfo`] into a JSON object.
     fn to_json(&self) -> Value {
         json!({
-            "motherboard_name": self.board_name,
-            "motherboard_serial": self.board_serial,
-            "motherboard_version": self.board_version,
-            "motherboard_vendor": self.board_vendor,
             "bios_date": self.bios_date,
             "bios_release": self.bios_release,
             "bios_version": self.bios_version,
             "bios_vendor": self.bios_vendor,
+            "board_name": self.board_name,
+            "board_serial": self.board_serial,
+            "board_version": self.board_version,
+            "board_vendor": self.board_vendor,
         })
     }
 
